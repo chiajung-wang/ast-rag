@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Env
+.env
+.env.local
+
+# Index (large binary, rebuild with make index)
+*.db
+*.db-shm
+*.db-wal
+
+# Corpus (cloned separately, not committed)
+langchain/
+corpus/
+
+# Evals output (generated, commit manually when publishing results)
+evals/results.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# AI
+.claude
+skills-lock.json
+
+# Personal
+.personal
