@@ -1,0 +1,5 @@
+COMMIT_SHA = "FILL_IN_AFTER_CLONE"
+REPO_URL = "https://github.com/langchain-ai/langchain"
+CORPUS_SUBPATH = "libs/core/langchain_core"
+CLONE_DIR = "langchain"
+DB_PATH = "index.db"
