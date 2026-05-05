@@ -30,8 +30,9 @@
 | 1.2 | Chunk dataclass + corpus config | `storage/chunk.py`, `indexer/corpus_config.py` |
 | 1.3 | AST chunker | `indexer/chunker.py`, `tests/test_chunker.py` |
 | 1.4 | Storage layer | `storage/db.py`, `tests/test_db.py` |
-| 1.5 | Embedder | `indexer/embedder.py` |
-| 1.6 | Indexer pipeline + `query.py` | `indexer/__main__.py`, `indexer/clone.py`, `query.py` |
+| 1.5 | Embedder | `indexer/embedder.py`, `tests/test_embedder.py` |
+| 1.6 | Clone script | `indexer/clone.py` |
+| 1.7 | Indexer pipeline + `query.py` | `indexer/__main__.py`, `query.py` |
 
 ---
 
