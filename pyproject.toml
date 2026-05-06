@@ -1,0 +1,27 @@
+[project]
+name = "ast-rag"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.2",
+    "langchain-anthropic>=0.3",
+    "langchain-core>=0.3",
+    "openai>=1.0",
+    "rank-bm25>=0.2",
+    "sqlite-vec>=0.1",
+    "streamlit>=1.40",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["storage", "indexer", "retrieval", "agent", "evals"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

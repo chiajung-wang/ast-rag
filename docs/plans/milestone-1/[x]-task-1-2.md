@@ -1,15 +1,17 @@
 # Task 1.2: Chunk Dataclass + Corpus Config
 
 **Files:**
+
 - Create: `storage/chunk.py`
 - Create: `indexer/corpus_config.py`
 - Create: `tests/test_chunk.py`
 
 ---
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_chunk.py`:
+
 ```python
 from storage.chunk import Chunk, make_chunk
 
@@ -68,7 +70,7 @@ def test_make_chunk_different_content_different_id():
     assert c1.id != c2.id
 ```
 
-- [ ] **Step 2: Run test — confirm failure**
+- [x] **Step 2: Run test — confirm failure**
 
 ```bash
 pytest tests/test_chunk.py -v
@@ -76,7 +78,7 @@ pytest tests/test_chunk.py -v
 
 Expected: `ModuleNotFoundError: No module named 'storage.chunk'`
 
-- [ ] **Step 3: Write `storage/chunk.py`**
+- [x] **Step 3: Write `storage/chunk.py`**
 
 ```python
 from __future__ import annotations
@@ -128,7 +130,7 @@ def make_chunk(
     )
 ```
 
-- [ ] **Step 4: Write `indexer/corpus_config.py`**
+- [x] **Step 4: Write `indexer/corpus_config.py`**
 
 ```python
 # Fill COMMIT_SHA after cloning: git -C langchain rev-parse HEAD
@@ -139,7 +141,7 @@ CLONE_DIR = "langchain"                       # local clone target
 DB_PATH = "index.db"
 ```
 
-- [ ] **Step 5: Run test — confirm pass**
+- [x] **Step 5: Run test — confirm pass**
 
 ```bash
 pytest tests/test_chunk.py -v
@@ -147,7 +149,7 @@ pytest tests/test_chunk.py -v
 
 Expected: 4 tests PASSED.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add storage/chunk.py indexer/corpus_config.py tests/test_chunk.py

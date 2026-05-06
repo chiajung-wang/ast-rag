@@ -5,19 +5,21 @@
 **Blocked by:** Task 1.2 (corpus_config)
 
 **Acceptance criteria:**
-- [ ] `python -m indexer.clone` clones the repo if `CLONE_DIR` does not exist; skips if it does
-- [ ] After running, `Path(CLONE_DIR) / CORPUS_SUBPATH` exists and contains `.py` files
-- [ ] Prints the resolved commit SHA
-- [ ] No unit test (git subprocess) — verified manually per acceptance criteria
+
+- [x] `python -m indexer.clone` clones the repo if `CLONE_DIR` does not exist; skips if it does
+- [x] After running, `Path(CLONE_DIR) / CORPUS_SUBPATH` exists and contains `.py` files
+- [x] Prints the resolved commit SHA
+- [x] No unit test (git subprocess) — verified manually per acceptance criteria
 
 ---
 
 **Files:**
+
 - Create: `indexer/clone.py`
 
 ---
 
-- [ ] **Step 1: Write `indexer/clone.py`**
+- [x] **Step 1: Write `indexer/clone.py`**
 
 ```python
 """Clone langchain-core corpus.
@@ -75,13 +77,14 @@ if __name__ == "__main__":
     clone_corpus()
 ```
 
-- [ ] **Step 2: Run and verify manually**
+- [x] **Step 2: Run and verify manually**
 
 ```bash
 python -m indexer.clone
 ```
 
 Expected output (first run):
+
 ```
 [clone] Cloning https://github.com/langchain-ai/langchain ...
 [clone] Resolved HEAD SHA: <sha>
@@ -89,14 +92,15 @@ Expected output (first run):
 [clone] Corpus ready: langchain/libs/core/langchain_core (N .py files)
 ```
 
-- [ ] **Step 3: Update `indexer/corpus_config.py` with the printed SHA**
+- [x] **Step 3: Update `indexer/corpus_config.py` with the printed SHA**
 
 Edit `indexer/corpus_config.py`:
+
 ```python
 COMMIT_SHA = "<paste SHA from output here>"
 ```
 
-- [ ] **Step 4: Re-run — confirm skip behaviour**
+- [x] **Step 4: Re-run — confirm skip behaviour**
 
 ```bash
 python -m indexer.clone
@@ -104,7 +108,7 @@ python -m indexer.clone
 
 Expected: `[clone] langchain already exists — skipping clone.`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add indexer/clone.py indexer/corpus_config.py
