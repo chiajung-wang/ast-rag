@@ -1,14 +1,16 @@
 # Task 1.3: AST Chunker
 
 **Files:**
+
 - Create: `indexer/chunker.py`
 - Create: `tests/test_chunker.py`
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_chunker.py`:
+
 ```python
 from pathlib import Path
 import tempfile
@@ -126,7 +128,7 @@ def test_chunk_corpus_recurses():
     assert "fn_b" in names
 ```
 
-- [ ] **Step 2: Run tests — confirm failure**
+- [x] **Step 2: Run tests — confirm failure**
 
 ```bash
 pytest tests/test_chunker.py -v
@@ -134,7 +136,7 @@ pytest tests/test_chunker.py -v
 
 Expected: `ModuleNotFoundError: No module named 'indexer.chunker'`
 
-- [ ] **Step 3: Write `indexer/chunker.py`**
+- [x] **Step 3: Write `indexer/chunker.py`**
 
 ```python
 from __future__ import annotations
@@ -222,7 +224,7 @@ def chunk_corpus(corpus_root: Path) -> list[Chunk]:
     return chunks
 ```
 
-- [ ] **Step 4: Run tests — confirm pass**
+- [x] **Step 4: Run tests — confirm pass**
 
 ```bash
 pytest tests/test_chunker.py -v
@@ -230,7 +232,7 @@ pytest tests/test_chunker.py -v
 
 Expected: 10 tests PASSED.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add indexer/chunker.py tests/test_chunker.py
