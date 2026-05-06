@@ -5,21 +5,23 @@
 **Blocked by:** Task 1.3 (chunker), Task 1.5 (embedder), Task 1.6 (clone)
 
 **Acceptance criteria:**
-- [ ] `make index` runs end-to-end without error
-- [ ] `index.db` created and contains >1 000 chunks
-- [ ] `python query.py "RunnableSequence"` returns ≥1 result with `symbol_name == "RunnableSequence"`
-- [ ] `python query.py "invoke method"` returns ≥1 result with `symbol_type == "method"`
-- [ ] Re-running `make index` is fast (skips already-embedded chunks)
+
+- [x] `make index` runs end-to-end without error
+- [x] `index.db` created and contains >1 000 chunks
+- [x] `python query.py "RunnableSequence"` returns ≥1 result with `symbol_name == "RunnableSequence"`
+- [x] `python query.py "invoke method"` returns ≥1 result with `symbol_type == "method"`
+- [x] Re-running `make index` is fast (skips already-embedded chunks)
 
 ---
 
 **Files:**
+
 - Create: `indexer/__main__.py`
 - Create: `query.py`
 
 ---
 
-- [ ] **Step 1: Write `indexer/__main__.py`**
+- [x] **Step 1: Write `indexer/__main__.py`**
 
 ```python
 """Indexer pipeline entry point.
@@ -57,7 +59,7 @@ if __name__ == "__main__":
     build_index()
 ```
 
-- [ ] **Step 2: Write `query.py`**
+- [x] **Step 2: Write `query.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -104,13 +106,14 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 3: Run the indexer**
+- [x] **Step 3: Run the indexer**
 
 ```bash
 make index
 ```
 
 Expected output (first run, ~5–10 min for embedding):
+
 ```
 [clone] langchain already exists — skipping clone.
 [index] Chunking langchain/libs/core/langchain_core ...
@@ -121,7 +124,7 @@ Expected output (first run, ~5–10 min for embedding):
 [index] Done. N chunks in index.db.
 ```
 
-- [ ] **Step 4: Verify chunk count**
+- [x] **Step 4: Verify chunk count**
 
 ```bash
 python -c "from storage.db import DB; db = DB('index.db'); print(len(db.all_chunks()), 'chunks')"
@@ -129,7 +132,7 @@ python -c "from storage.db import DB; db = DB('index.db'); print(len(db.all_chun
 
 Expected: `>1000 chunks`
 
-- [ ] **Step 5: Spot-check with `query.py`**
+- [x] **Step 5: Spot-check with `query.py`**
 
 ```bash
 python query.py "RunnableSequence"
@@ -139,7 +142,7 @@ python query.py "how does streaming work"
 
 For each: inspect that top results are relevant. At least one result per query should clearly match the intent.
 
-- [ ] **Step 6: Verify idempotency**
+- [x] **Step 6: Verify idempotency**
 
 ```bash
 make index  # second run — should be fast
@@ -147,7 +150,7 @@ make index  # second run — should be fast
 
 Expected: `[index] Done. N chunks in index.db.` with no "embedded batch" lines (all skipped).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add indexer/__main__.py query.py
