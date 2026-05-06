@@ -27,10 +27,10 @@ Streamlit `st.expander` for each citation. Shows: (1) raw source lines in monosp
 Max 100 lines per call (`end - start <= 100`). If exceeded, clamps to 100 and appends `"[truncated: requested N lines, returned 100]"` to result. Claude can re-call with narrower range.
 
 ## BM25 Tokenization
-Whitespace split + camelCase expansion. `"RunnableSequence"` → `["Runnable", "Sequence", "RunnableSequence"]`. Applied to both chunk text at index time and query text at search time. ~10 lines regex, no external tokenizer.
+Whitespace split + camelCase expansion + snake_case expansion. `"RunnableSequence"` → `["Runnable", "Sequence", "RunnableSequence"]`. `"invoke_async"` → `["invoke", "async", "invoke_async"]`. Applied symmetrically to both chunk text at index time and query text at search time. ~10 lines regex, no external tokenizer.
 
 ## RRF (Reciprocal Rank Fusion)
-Merge strategy for BM25 top-10 and dense top-10 results. Produces a unified top-5 without learned weights. No reranker.
+Merge strategy for BM25 top-10 and dense top-10 results. Produces a unified top-5 without learned weights. No reranker. Formula: `score(d) = Σ 1 / (k + rank(d))`, `k=60` (standard, hardcoded). Chunks appearing in only one list are still included.
 
 ## System Prompt Citation Rule
 Hard requirement in system prompt: "You MUST cite every factual claim with `[path:start-end]`. Never state a fact without a citation. If retrieved chunks do not support a claim, say 'I don't have source for this' instead of stating it uncited." Escape valve prevents hallucinated markers; hard requirement drives citation recall in eval.
