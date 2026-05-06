@@ -5,23 +5,26 @@
 **Blocked by:** Task 1.2 (Chunk), Task 1.4 (DB)
 
 **Acceptance criteria:**
-- [ ] `embed_chunks(chunks, db)` skips chunks where `db.has_embedding(rowid)` is True
-- [ ] Calls OpenAI in batches of ≤100 chunks (avoids rate limits)
-- [ ] Inserts embedding via `db.insert_embedding` after each batch
-- [ ] Test verifies skip logic without making real API calls (mock)
-- [ ] Test verifies batch size respected
+
+- [x] `embed_chunks(chunks, db)` skips chunks where `db.has_embedding(rowid)` is True
+- [x] Calls OpenAI in batches of ≤100 chunks (avoids rate limits)
+- [x] Inserts embedding via `db.insert_embedding` after each batch
+- [x] Test verifies skip logic without making real API calls (mock)
+- [x] Test verifies batch size respected
 
 ---
 
 **Files:**
+
 - Create: `indexer/embedder.py`
 - Create: `tests/test_embedder.py`
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_embedder.py`:
+
 ```python
 from unittest.mock import MagicMock, patch, call
 import tempfile
@@ -81,7 +84,7 @@ def test_embed_chunks_batches(mock_embed, tmp_path):
     assert mock_embed.call_count == 2  # ceil(n / BATCH_SIZE)
 ```
 
-- [ ] **Step 2: Run tests — confirm failure**
+- [x] **Step 2: Run tests — confirm failure**
 
 ```bash
 pytest tests/test_embedder.py -v
@@ -89,7 +92,7 @@ pytest tests/test_embedder.py -v
 
 Expected: `ModuleNotFoundError: No module named 'indexer.embedder'`
 
-- [ ] **Step 3: Write `indexer/embedder.py`**
+- [x] **Step 3: Write `indexer/embedder.py`**
 
 ```python
 from __future__ import annotations
@@ -140,7 +143,7 @@ def embed_chunks(chunks: list[Chunk], db: DB) -> None:
         print(f"  embedded batch {i + 1}/{num_batches} ({len(batch)} chunks)")
 ```
 
-- [ ] **Step 4: Run tests — confirm pass**
+- [x] **Step 4: Run tests — confirm pass**
 
 ```bash
 pytest tests/test_embedder.py -v
@@ -148,7 +151,7 @@ pytest tests/test_embedder.py -v
 
 Expected: 3 tests PASSED.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add indexer/embedder.py tests/test_embedder.py
