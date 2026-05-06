@@ -5,12 +5,12 @@
 **Blocked by:** Task 1.4 (DB layer)
 
 **Acceptance criteria:**
-- [ ] `_tokenize("RunnableSequence")` → includes `"runnable"`, `"sequence"`, `"runnablesequence"`
-- [ ] `_tokenize("invoke_async")` → includes `"invoke"`, `"async"`, `"invoke_async"`
-- [ ] `BM25Index.search("RunnableSequence")` returns chunk whose `symbol_name == "RunnableSequence"` in top results
-- [ ] `BM25Index.search(...)` with `k` larger than corpus returns all scored chunks (no error)
-- [ ] Empty corpus → `search` returns `[]`
-- [ ] All tests pass
+- [x] `_tokenize("RunnableSequence")` → includes `"runnable"`, `"sequence"`, `"runnablesequence"`
+- [x] `_tokenize("invoke_async")` → includes `"invoke"`, `"async"`, `"invoke_async"`
+- [x] `BM25Index.search("RunnableSequence")` returns chunk whose `symbol_name == "RunnableSequence"` in top results
+- [x] `BM25Index.search(...)` with `k` larger than corpus returns all scored chunks (no error)
+- [x] Empty corpus → `search` returns `[]`
+- [x] All tests pass
 
 ---
 
@@ -20,7 +20,7 @@
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_bm25.py`:
 
@@ -115,7 +115,7 @@ def test_bm25_from_db(tmp_path):
     assert any(c.symbol_name == "RunnableSequence" for c in results)
 ```
 
-- [ ] **Step 2: Run tests — confirm failure**
+- [x] **Step 2: Run tests — confirm failure**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_bm25.py -v
@@ -123,7 +123,7 @@ def test_bm25_from_db(tmp_path):
 
 Expected: `ModuleNotFoundError: No module named 'retrieval.bm25_index'`
 
-- [ ] **Step 3: Write `retrieval/bm25_index.py`**
+- [x] **Step 3: Write `retrieval/bm25_index.py`**
 
 ```python
 from __future__ import annotations
@@ -169,7 +169,7 @@ class BM25Index:
         return cls(db.all_chunks())
 ```
 
-- [ ] **Step 4: Run tests — confirm pass**
+- [x] **Step 4: Run tests — confirm pass**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_bm25.py -v
@@ -177,7 +177,7 @@ class BM25Index:
 
 Expected: all tests PASSED.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add retrieval/bm25_index.py tests/test_bm25.py
