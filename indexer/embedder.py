@@ -8,6 +8,7 @@ from storage.db import DB
 load_dotenv()
 
 BATCH_SIZE = 100
+MAX_CHARS = 24_000  # ~6k tokens @ 4 chars/token — safely under 8192 limit
 _client: OpenAI | None = None
 
 
@@ -39,7 +40,7 @@ def embed_chunks(chunks: list[Chunk], db: DB) -> None:
     num_batches = math.ceil(len(pairs) / BATCH_SIZE)
     for i in range(num_batches):
         batch = pairs[i * BATCH_SIZE : (i + 1) * BATCH_SIZE]
-        texts = [c.embed_text for c, _ in batch]
+        texts = [c.embed_text[:MAX_CHARS] for c, _ in batch]
         embeddings = _openai_embed(texts)
         for (_, rowid), embedding in zip(batch, embeddings):
             db.insert_embedding(rowid, embedding)
