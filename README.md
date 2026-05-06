@@ -45,6 +45,18 @@ python query.py "Runnable definition"
 make eval
 ```
 
+## Status
+
+| Milestone | What | Status |
+|---|---|---|
+| 1 | Foundation & Indexer — storage, AST chunker, embedder, clone script, pipeline | ✅ Complete |
+| 2 | Hybrid Retrieval — BM25 + dense RRF | Planned |
+| 3 | LangGraph Agent — retrieve + answer nodes | Planned |
+| 4 | Streamlit UI + citations | Planned |
+| 5 | Eval harness | Planned |
+
+Index: 2414 chunks from `langchain-core` at commit `1519ed5a`.
+
 ## Eval results
 
 _Run `make eval` to generate._
