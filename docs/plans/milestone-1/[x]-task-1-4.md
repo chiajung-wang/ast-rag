@@ -5,26 +5,29 @@
 **Blocked by:** Task 1.2 (Chunk dataclass)
 
 **Acceptance criteria:**
-- [ ] `DB` initialises schema on first open (idempotent — safe to call twice)
-- [ ] `insert_chunk` returns `rowid`, skips duplicates via `INSERT OR IGNORE`
-- [ ] `insert_embedding` / `has_embedding` form the idempotency gate for the embedder
-- [ ] `vector_search` returns `list[Chunk]` ordered by cosine distance
-- [ ] `symbol_lookup` is case-insensitive exact match
-- [ ] `chunk_exists_at` used by citation validator
-- [ ] `all_chunks` / `all_symbol_names` used by BM25 index + retrieve heuristic
-- [ ] All tests pass against a real (temp-file) SQLite DB
+
+- [x] `DB` initialises schema on first open (idempotent — safe to call twice)
+- [x] `insert_chunk` returns `rowid`, skips duplicates via `INSERT OR IGNORE`
+- [x] `insert_embedding` / `has_embedding` form the idempotency gate for the embedder
+- [x] `vector_search` returns `list[Chunk]` ordered by cosine distance
+- [x] `symbol_lookup` is case-insensitive exact match
+- [x] `chunk_exists_at` used by citation validator
+- [x] `all_chunks` / `all_symbol_names` used by BM25 index + retrieve heuristic
+- [x] All tests pass against a real (temp-file) SQLite DB
 
 ---
 
 **Files:**
+
 - Create: `storage/db.py`
 - Create: `tests/test_db.py`
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_db.py`:
+
 ```python
 import struct
 import tempfile
@@ -141,7 +144,7 @@ def test_schema_init_is_idempotent(tmp_path):
     DB(path)  # second open — must not raise
 ```
 
-- [ ] **Step 2: Run tests — confirm failure**
+- [x] **Step 2: Run tests — confirm failure**
 
 ```bash
 pytest tests/test_db.py -v
@@ -149,7 +152,7 @@ pytest tests/test_db.py -v
 
 Expected: `ModuleNotFoundError: No module named 'storage.db'`
 
-- [ ] **Step 3: Write `storage/db.py`**
+- [x] **Step 3: Write `storage/db.py`**
 
 ```python
 from __future__ import annotations
@@ -302,7 +305,7 @@ def _row_to_chunk(row: sqlite3.Row) -> Chunk:
     )
 ```
 
-- [ ] **Step 4: Run tests — confirm pass**
+- [x] **Step 4: Run tests — confirm pass**
 
 ```bash
 pytest tests/test_db.py -v
@@ -310,7 +313,7 @@ pytest tests/test_db.py -v
 
 Expected: 13 tests PASSED.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add storage/db.py tests/test_db.py
