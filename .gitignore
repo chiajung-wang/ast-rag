@@ -23,6 +23,7 @@ corpus/
 
 # Evals output (generated, commit manually when publishing results)
 evals/results.md
+evals/results/
 
 # OS
 .DS_Store

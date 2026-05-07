@@ -2,6 +2,8 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import datetime
+from pathlib import Path
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -90,7 +92,7 @@ def _judge(
                     line for line in raw.splitlines()
                     if not line.startswith("```")
                 ).strip()
-            verdict = json.loads(raw)
+            verdict, _ = json.JSONDecoder().raw_decode(raw)
             usage = response.usage_metadata or {}
             return (
                 bool(verdict.get("description_correct", False)),
@@ -110,12 +112,15 @@ def _judge(
 def run(
     questions_path: str = "evals/questions.jsonl",
     results_path: str = "evals/results.md",
+    start: int = 1,
+    end: int | None = None,
 ) -> None:
     with open(questions_path) as f:
         questions = [
             json.loads(line) for line in f
             if line.strip() and not json.loads(line.strip()).get("_meta")
         ]
+    questions = questions[start - 1 : end]
 
     rows = []
     for q in questions:
@@ -143,7 +148,7 @@ def run(
             cost = agent_cost + judge_cost
             score = compute_score(file_ok, judge_pass)
             judge_str = "pass" if judge_pass else "fail"
-        except Exception as exc:
+        except BaseException as exc:
             print(f"{q['id']}: ERROR — {exc!r}")
             score, file_ok, judge_str, answer = 0, False, "error", ""
         rows.append({
@@ -165,4 +170,15 @@ def run(
 
 
 if __name__ == "__main__":
-    run()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start", type=int, default=1, help="First question number (1-based, inclusive)")
+    parser.add_argument("--end", type=int, default=None, help="Last question number (1-based, inclusive)")
+    parser.add_argument("--questions", default="evals/questions.jsonl")
+    parser.add_argument("--results-dir", default="evals/results")
+    args = parser.parse_args()
+    results_dir = Path(args.results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%m%d-%H%M")
+    results_path = str(results_dir / f"results-{timestamp}.md")
+    run(args.questions, results_path, args.start, args.end)
