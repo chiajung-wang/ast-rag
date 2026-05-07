@@ -5,12 +5,12 @@
 **Blocked by:** Task 1.2 (Chunk dataclass)
 
 **Acceptance criteria:**
-- [ ] Chunk appearing in both BM25 and dense lists scores higher than a chunk in only one list
-- [ ] Chunk IDs are deduplicated — same chunk appears at most once in output
-- [ ] `top_n` caps output length
-- [ ] Single-list hits are included (not filtered out)
-- [ ] Empty inputs return `[]`
-- [ ] All tests pass
+- [x] Chunk appearing in both BM25 and dense lists scores higher than a chunk in only one list
+- [x] Chunk IDs are deduplicated — same chunk appears at most once in output
+- [x] `top_n` caps output length
+- [x] Single-list hits are included (not filtered out)
+- [x] Empty inputs return `[]`
+- [x] All tests pass
 
 ---
 
@@ -20,7 +20,7 @@
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_rrf.py`:
 
@@ -93,7 +93,7 @@ def test_rrf_rank_order_respected():
     assert results[0].symbol_name == "high"
 ```
 
-- [ ] **Step 2: Run tests — confirm failure**
+- [x] **Step 2: Run tests — confirm failure**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_rrf.py -v
@@ -101,7 +101,7 @@ def test_rrf_rank_order_respected():
 
 Expected: `ModuleNotFoundError: No module named 'retrieval.rrf'`
 
-- [ ] **Step 3: Write `retrieval/rrf.py`**
+- [x] **Step 3: Write `retrieval/rrf.py`**
 
 ```python
 from __future__ import annotations
@@ -129,7 +129,7 @@ def rrf(
     return [id_to_chunk[chunk_id] for chunk_id, _ in ranked[:top_n]]
 ```
 
-- [ ] **Step 4: Run tests — confirm pass**
+- [x] **Step 4: Run tests — confirm pass**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_rrf.py -v
@@ -137,7 +137,7 @@ def rrf(
 
 Expected: all tests PASSED.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add retrieval/rrf.py tests/test_rrf.py
