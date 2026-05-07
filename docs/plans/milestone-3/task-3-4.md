@@ -5,10 +5,10 @@
 **Blocked by:** Task 3.3 (compiled graph)
 
 **Acceptance criteria:**
-- [ ] `python ask.py "Where is RunnableSequence defined?"` returns answer containing `[runnables/base.py:N-M]`
-- [ ] `python ask.py "What is RunnablePassthrough?"` returns answer with ≥1 citation
-- [ ] `python ask.py "foo bar baz nonsense"` returns graceful response, not an error
-- [ ] No unit test — verified manually per acceptance criteria
+- [x] `python ask.py "Where is RunnableSequence defined?"` returns answer containing `[runnables/base.py:N-M]`
+- [x] `python ask.py "What is RunnablePassthrough?"` returns answer with ≥1 citation
+- [x] `python ask.py "foo bar baz nonsense"` returns graceful response, not an error
+- [x] No unit test — verified manually per acceptance criteria
 
 ---
 
@@ -17,7 +17,7 @@
 
 ---
 
-- [ ] **Step 1: Write `ask.py`**
+- [x] **Step 1: Write `ask.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run acceptance checks**
+- [x] **Step 2: Run acceptance checks**
 
 ```bash
 python ask.py "Where is RunnableSequence defined?"
@@ -71,7 +71,7 @@ python ask.py "foo bar baz nonsense"
 ```
 Expected: graceful response like "I don't have source for this", no exception.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add ask.py
