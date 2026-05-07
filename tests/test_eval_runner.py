@@ -1,6 +1,6 @@
 from unittest.mock import patch, MagicMock
 import json
-from evals.run import compute_score, check_file_ok, format_results_md, run
+from evals.run import compute_score, check_file_ok, format_results_md, compute_cost, run
 
 
 def test_score_both_pass():
@@ -56,7 +56,8 @@ def test_run_writes_results_md(tmp_path):
 
     mock_judge_model = MagicMock()
     mock_judge_model.invoke.return_value = MagicMock(
-        content='{"path_correct": true, "path_reasoning": "ok", "description_correct": true, "missing_concepts": [], "forbidden_assertions_made": [], "description_reasoning": "ok", "overall_correct": true, "more_precise_than_reference": false}'
+        content='{"path_correct": true, "path_reasoning": "ok", "description_correct": true, "missing_concepts": [], "forbidden_assertions_made": [], "description_reasoning": "ok", "overall_correct": true, "more_precise_than_reference": false}',
+        usage_metadata={"input_tokens": 100, "output_tokens": 50},
     )
 
     with patch("evals.run.graph", mock_graph), \
@@ -66,6 +67,8 @@ def test_run_writes_results_md(tmp_path):
     content = results_path.read_text(encoding="utf-8")
     assert "q01" in content
     assert "Total:" in content
+    assert "Cost:" in content
+    assert "$" in content
 
 
 def test_run_skips_meta_lines(tmp_path):
@@ -89,7 +92,8 @@ def test_run_skips_meta_lines(tmp_path):
     mock_graph.invoke.return_value = {"messages": [MagicMock(content="answer [runnables/base.py:1-5]")]}
     mock_judge_model = MagicMock()
     mock_judge_model.invoke.return_value = MagicMock(
-        content='{"path_correct": true, "path_reasoning": "ok", "description_correct": true, "missing_concepts": [], "forbidden_assertions_made": [], "description_reasoning": "ok", "overall_correct": true, "more_precise_than_reference": false}'
+        content='{"path_correct": true, "path_reasoning": "ok", "description_correct": true, "missing_concepts": [], "forbidden_assertions_made": [], "description_reasoning": "ok", "overall_correct": true, "more_precise_than_reference": false}',
+        usage_metadata={"input_tokens": 100, "output_tokens": 50},
     )
 
     with patch("evals.run.graph", mock_graph), \
@@ -101,15 +105,26 @@ def test_run_skips_meta_lines(tmp_path):
 
 def test_format_results_md_structure():
     rows = [
-        {"id": "q01", "question": "Where is X?", "score": 2, "file_ok": True, "judge": "pass", "tier": "recall", "answer": "X is in [base.py:1-10]."},
-        {"id": "q02", "question": "How does Y work?", "score": 0, "file_ok": False, "judge": "fail", "tier": "hard", "answer": ""},
+        {"id": "q01", "question": "Where is X?", "score": 2, "file_ok": True, "judge": "pass", "tier": "recall", "answer": "X is in [base.py:1-10].", "cost": 0.0012},
+        {"id": "q02", "question": "How does Y work?", "score": 0, "file_ok": False, "judge": "fail", "tier": "hard", "answer": "", "cost": 0.0},
     ]
     md = format_results_md(rows)
     assert "| id |" in md
     assert "| q01 |" in md
     assert "| q02 |" in md
     assert "Total: 2 / 4" in md
+    assert "Cost:" in md
     assert "✓" in md
     assert "recall" in md
     assert "### q01" in md
     assert "X is in [base.py:1-10]." in md
+
+
+def test_compute_cost_haiku():
+    cost = compute_cost("claude-haiku-4-5", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert abs(cost - 4.80) < 0.01
+
+
+def test_compute_cost_unknown_model_fallback():
+    cost = compute_cost("claude-unknown-99", input_tokens=1_000_000, output_tokens=0)
+    assert abs(cost - 3.00) < 0.01
