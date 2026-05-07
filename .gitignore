@@ -39,3 +39,7 @@ skills-lock.json
 
 # Personal
 .personal
+.dependency-cruiser.js
+package-lock.json
+node_modules
+package.json
