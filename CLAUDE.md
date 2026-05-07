@@ -58,7 +58,11 @@ Entire system runs in one Python process. No services, no Docker, no separate fr
 - `find_symbol(name: str) -> Chunk | None` — case-insensitive exact match
 - `read_file(path: str, line_start: int, line_end: int) -> str` — max 100 lines, truncates with warning
 
-**Citations**: answer node emits `[short/path.py:start-end]` markers (corpus root stripped). Validated before return; invalid markers stripped with footnote.
+**Citations**: answer node emits `[short/path.py:start-end]` markers (corpus root stripped). Validated via `db.chunk_exists_at`; invalid markers stripped with footnote `"*N citation(s) could not be verified and were removed.*"`.
+
+**Answer node tool loop**: max 3 LLM round-trips. Claude calls `read_file` tool → result fed back → repeat until plain response or 3 rounds exhausted. Loop runs inside a single `answer_node` function (not separate graph nodes).
+
+**Chunk context in system prompt**: full chunk `text` injected into system prompt alongside citation rule. User message = raw query only.
 
 **Eval**: 20 hand-crafted questions in `evals/questions.jsonl`. Hybrid scoring: auto file-path check + LLM-as-judge. Results in `evals/results.md`.
 
