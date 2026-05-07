@@ -44,6 +44,6 @@ Total: X / 40
 
 ## Steps
 
-- [ ] Write `evals/run.py`: load jsonl, invoke agent per question, score, write results.md.
-- [ ] Write `tests/test_eval_runner.py`: mock agent output and judge response, assert score calculation and results.md format.
-- [ ] Run `make eval` end-to-end and verify `evals/results.md` written correctly.
+- [x] Write `evals/run.py`: load jsonl, invoke agent per question, score, write results.md.
+- [x] Write `tests/test_eval_runner.py`: mock agent output and judge response, assert score calculation and results.md format.
+- [x] Run `make eval` end-to-end and verify `evals/results.md` written correctly.
