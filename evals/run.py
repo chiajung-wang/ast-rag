@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import time
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -41,6 +42,7 @@ def _judge(
     must_include: list[str],
     must_not_assert: list[str],
     answer: str,
+    max_retries: int = 3,
 ) -> bool:
     model = ChatAnthropic(model=JUDGE_MODEL)
     payload = {
@@ -51,16 +53,26 @@ def _judge(
         "model_answer": answer,
     }
     prompt = json.dumps(payload, indent=2)
-    response = model.invoke([SystemMessage(content=JUDGE_SYSTEM), HumanMessage(content=prompt)])
-    raw = response.content.strip()
-    # strip markdown code fences if present
-    if raw.startswith("```"):
-        raw = "\n".join(
-            line for line in raw.splitlines()
-            if not line.startswith("```")
-        ).strip()
-    verdict = json.loads(raw)
-    return bool(verdict.get("description_correct", False))
+    messages = [SystemMessage(content=JUDGE_SYSTEM), HumanMessage(content=prompt)]
+    for attempt in range(max_retries):
+        try:
+            response = model.invoke(messages)
+            raw = response.content.strip()
+            if raw.startswith("```"):
+                raw = "\n".join(
+                    line for line in raw.splitlines()
+                    if not line.startswith("```")
+                ).strip()
+            verdict = json.loads(raw)
+            return bool(verdict.get("description_correct", False))
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt
+                print(f"  judge error (attempt {attempt + 1}): {exc!r} — retrying in {wait}s")
+                time.sleep(wait)
+            else:
+                print(f"  judge failed after {max_retries} attempts: {exc!r} — scoring as fail")
+                return False
 
 
 def run(
@@ -75,33 +87,38 @@ def run(
 
     rows = []
     for q in questions:
-        result = graph.invoke({
-            "messages": [HumanMessage(content=q["question"])],
-            "retrieved_chunks": [],
-        })
-        answer = result["messages"][-1].content
-        file_ok = check_file_ok(q["expected_file_paths"], answer)
-        judge_pass = _judge(
-            q["question"],
-            q["expected_file_paths"],
-            q["description_must_include"],
-            q.get("description_must_not_assert", []),
-            answer,
-        )
-        score = compute_score(file_ok, judge_pass)
+        try:
+            result = graph.invoke({
+                "messages": [HumanMessage(content=q["question"])],
+                "retrieved_chunks": [],
+            })
+            answer = result["messages"][-1].content
+            file_ok = check_file_ok(q["expected_file_paths"], answer)
+            judge_pass = _judge(
+                q["question"],
+                q["expected_file_paths"],
+                q["description_must_include"],
+                q.get("description_must_not_assert", []),
+                answer,
+            )
+            score = compute_score(file_ok, judge_pass)
+            judge_str = "pass" if judge_pass else "fail"
+        except Exception as exc:
+            print(f"{q['id']}: ERROR — {exc!r}")
+            score, file_ok, judge_str = 0, False, "error"
         rows.append({
             "id": q["id"],
             "question": q["question"],
             "score": score,
             "file_ok": file_ok,
-            "judge": "pass" if judge_pass else "fail",
+            "judge": judge_str,
             "tier": q.get("tier", ""),
         })
-        print(f"{q['id']}: score={score} file_ok={file_ok} judge={'pass' if judge_pass else 'fail'}")
+        print(f"{q['id']}: score={score} file_ok={file_ok} judge={judge_str}")
+        md = format_results_md(rows)
+        with open(results_path, "w", encoding="utf-8") as f:
+            f.write(md)
 
-    md = format_results_md(rows)
-    with open(results_path, "w", encoding="utf-8") as f:
-        f.write(md)
     print(f"\nResults written to {results_path}")
 
 

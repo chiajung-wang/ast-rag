@@ -63,5 +63,11 @@ def answer_node(state: AgentState) -> dict:
     else:
         response = model.invoke(messages)
 
-    validated = validate_citations(response.content, _get_db())
+    content = response.content
+    if not isinstance(content, str):
+        content = "".join(
+            (b.get("text", "") if isinstance(b, dict) else getattr(b, "text", ""))
+            for b in content
+        )
+    validated = validate_citations(content, _get_db())
     return {"messages": list(state["messages"]) + [AIMessage(content=validated)]}
