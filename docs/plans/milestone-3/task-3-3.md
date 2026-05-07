@@ -5,12 +5,12 @@
 **Blocked by:** Task 3.1 (AgentState + retrieve node), Task 3.2 (citation validator)
 
 **Acceptance criteria:**
-- [ ] `answer_node` appends an `AIMessage` to `state["messages"]`
-- [ ] When LLM returns a tool call, `read_file` executes and result feeds back
-- [ ] Loop stops after ≤3 rounds even if LLM keeps calling tools
-- [ ] Citation validator runs on final response text
-- [ ] `graph.invoke({"messages": [...], "retrieved_chunks": []})` returns dict with `messages`
-- [ ] All tests pass (LLM mocked — no real API calls)
+- [x] `answer_node` appends an `AIMessage` to `state["messages"]`
+- [x] When LLM returns a tool call, `read_file` executes and result feeds back
+- [x] Loop stops after ≤3 rounds even if LLM keeps calling tools
+- [x] Citation validator runs on final response text
+- [x] `graph.invoke({"messages": [...], "retrieved_chunks": []})` returns dict with `messages`
+- [x] All tests pass (LLM mocked — no real API calls)
 
 ---
 
@@ -21,7 +21,7 @@
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_answer_node.py`:
 
@@ -139,7 +139,7 @@ def test_graph_invoke_returns_messages(mock_get_db, mock_anthropic):
     assert isinstance(result["messages"][-1], AIMessage)
 ```
 
-- [ ] **Step 2: Run tests — confirm failure**
+- [x] **Step 2: Run tests — confirm failure**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_answer_node.py -v
@@ -147,7 +147,7 @@ def test_graph_invoke_returns_messages(mock_get_db, mock_anthropic):
 
 Expected: `ModuleNotFoundError: No module named 'agent.answer_node'`
 
-- [ ] **Step 3: Write `agent/answer_node.py`**
+- [x] **Step 3: Write `agent/answer_node.py`**
 
 ```python
 from __future__ import annotations
@@ -217,7 +217,7 @@ def answer_node(state: AgentState) -> dict:
     return {"messages": list(state["messages"]) + [AIMessage(content=validated)]}
 ```
 
-- [ ] **Step 4: Write `agent/graph.py`**
+- [x] **Step 4: Write `agent/graph.py`**
 
 ```python
 from __future__ import annotations
@@ -236,7 +236,7 @@ _builder.add_edge("answer", END)
 graph = _builder.compile()
 ```
 
-- [ ] **Step 5: Run tests — confirm pass**
+- [x] **Step 5: Run tests — confirm pass**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_answer_node.py -v
@@ -244,7 +244,7 @@ graph = _builder.compile()
 
 Expected: all tests PASSED.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add agent/answer_node.py agent/graph.py tests/test_answer_node.py
