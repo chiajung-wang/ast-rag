@@ -5,12 +5,12 @@
 **Blocked by:** Task 1.4 (DB layer — `chunk_exists_at` already exists)
 
 **Acceptance criteria:**
-- [ ] Valid citations pass through unchanged
-- [ ] Invalid citation stripped from text; footnote `"*N citation(s) could not be verified and were removed.*"` appended
-- [ ] Multiple invalid citations: all stripped, count in footnote is correct
-- [ ] Text with no citations returns unchanged
-- [ ] Mix of valid + invalid: valid kept, invalid stripped
-- [ ] All tests pass
+- [x] Valid citations pass through unchanged
+- [x] Invalid citation stripped from text; footnote `"*N citation(s) could not be verified and were removed.*"` appended
+- [x] Multiple invalid citations: all stripped, count in footnote is correct
+- [x] Text with no citations returns unchanged
+- [x] Mix of valid + invalid: valid kept, invalid stripped
+- [x] All tests pass
 
 ---
 
@@ -20,7 +20,7 @@
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_citations.py`:
 
@@ -75,7 +75,7 @@ def test_mixed_valid_and_invalid(db):
     assert "*1 citation(s) could not be verified and were removed.*" in result
 ```
 
-- [ ] **Step 2: Run tests — confirm failure**
+- [x] **Step 2: Run tests — confirm failure**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_citations.py -v
@@ -83,7 +83,7 @@ def test_mixed_valid_and_invalid(db):
 
 Expected: `ModuleNotFoundError: No module named 'agent.citations'`
 
-- [ ] **Step 3: Write `agent/citations.py`**
+- [x] **Step 3: Write `agent/citations.py`**
 
 ```python
 from __future__ import annotations
@@ -115,7 +115,7 @@ def validate_citations(text: str, db: DB) -> str:
     return result
 ```
 
-- [ ] **Step 4: Run tests — confirm pass**
+- [x] **Step 4: Run tests — confirm pass**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_citations.py -v
@@ -123,7 +123,7 @@ def validate_citations(text: str, db: DB) -> str:
 
 Expected: all tests PASSED.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/citations.py tests/test_citations.py
