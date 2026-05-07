@@ -28,15 +28,23 @@ Build `evals/run.py` that runs all 30 questions through the agent, scores each 0
 
 **Retry**: `_judge` retries up to 3 times with exponential backoff (1s, 2s). Per-question try/except logs errors as `score=0 judge=error` without aborting the run.
 
+**Cost tracking**: per-question cost computed from actual `usage_metadata` (judge) and estimated token count from message lengths (agent). Pricing lookup keyed by model prefix (`claude-haiku-4-5`, `claude-sonnet-4-6`, `claude-opus-4-7`). Models read from env vars `AGENT_MODEL` / `JUDGE_MODEL`.
+
 **results.md format**:
 
 ```markdown
-| id | question | score | file_ok | judge | tier |
-|---|---|---|---|---|---|
-| q01 | Where is RunnableSequence defined? | 2 | ✓ | pass | recall |
+| id | question | score | file_ok | judge | tier | cost |
+|---|---|---|---|---|---|---|
+| q01 | Where is RunnableSequence defined? | 2 | ✓ | pass | recall | $0.0023 |
 ...
 
-Total: X / 60
+Total: X / 60 — Cost: $Y.YYYY
+
+---
+
+### q01 — Where is RunnableSequence defined? ($0.0023)
+
+<full agent answer>
 ```
 
 Results written after each question (interrupt-safe).
@@ -54,3 +62,4 @@ Results written after each question (interrupt-safe).
 - [x] Run `make eval` end-to-end and verify `evals/results.md` written correctly.
 - [x] Add retry logic to `_judge` and per-question error handling.
 - [x] Write results incrementally after each question (interrupt-safe).
+- [x] Track per-question cost (agent + judge) using model pricing dict and usage metadata.
