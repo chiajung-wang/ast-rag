@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool
@@ -45,7 +46,8 @@ def _build_system_prompt(chunks) -> str:
 
 
 def answer_node(state: AgentState) -> dict:
-    model = ChatAnthropic(model="claude-sonnet-4-6").bind_tools([read_file])
+    model_name = os.environ.get("AGENT_MODEL", "claude-haiku-4-5")
+    model = ChatAnthropic(model=model_name).bind_tools([read_file])
     system = SystemMessage(content=_build_system_prompt(state["retrieved_chunks"]))
     messages: list = [system] + list(state["messages"])
 
