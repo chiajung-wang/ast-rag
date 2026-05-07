@@ -6,12 +6,9 @@ Usage:
     python query.py "invoke method" --k 10
 """
 from __future__ import annotations
-import sys
 import argparse
 from dotenv import load_dotenv
-from openai import OpenAI
-from storage.db import DB
-from indexer.corpus_config import DB_PATH
+from retrieval.pipeline import search_corpus
 
 load_dotenv()
 
@@ -23,13 +20,7 @@ def main() -> None:
     args = parser.parse_args()
     query = " ".join(args.query)
 
-    client = OpenAI()
-    embedding = client.embeddings.create(
-        model="text-embedding-3-small", input=[query]
-    ).data[0].embedding
-
-    db = DB(DB_PATH)
-    results = db.vector_search(embedding, k=args.k)
+    results = search_corpus(query, k=args.k)
 
     print(f"\nQuery: {query!r}  ({len(results)} results)\n")
     for i, c in enumerate(results, 1):

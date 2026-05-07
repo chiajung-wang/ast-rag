@@ -5,10 +5,10 @@
 **Blocked by:** Task 2.3 (retrieval pipeline)
 
 **Acceptance criteria:**
-- [ ] `python query.py "RunnableSequence"` — top result has `symbol_name == "RunnableSequence"`
-- [ ] `python query.py "how does streaming work"` — ≥3 results with `symbol_type` of `"method"` or `"function"`
-- [ ] `python query.py "invoke method" --k 10` — ≥1 result with `symbol_type == "method"`
-- [ ] No unit test — verified manually per acceptance criteria
+- [x] `python query.py "RunnableSequence"` — top result has `symbol_name == "RunnableSequence"`
+- [x] `python query.py "how does streaming work"` — ≥3 results with `symbol_type` of `"method"` or `"function"`
+- [x] `python query.py "invoke method" --k 10` — ≥1 result with `symbol_type == "method"`
+- [x] No unit test — verified manually per acceptance criteria
 
 ---
 
@@ -17,7 +17,7 @@
 
 ---
 
-- [ ] **Step 1: Update `query.py`**
+- [x] **Step 1: Update `query.py`**
 
 Replace the current direct DB + `vector_search` implementation with `search_corpus`:
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run spot checks**
+- [x] **Step 2: Run spot checks**
 
 ```bash
 python query.py "RunnableSequence"
@@ -77,7 +77,7 @@ python query.py "invoke method" --k 10
 ```
 Expected: ≥1 result with `[method]` label.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add query.py
