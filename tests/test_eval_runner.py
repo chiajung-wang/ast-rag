@@ -101,8 +101,8 @@ def test_run_skips_meta_lines(tmp_path):
 
 def test_format_results_md_structure():
     rows = [
-        {"id": "q01", "question": "Where is X?", "score": 2, "file_ok": True, "judge": "pass", "tier": "recall"},
-        {"id": "q02", "question": "How does Y work?", "score": 0, "file_ok": False, "judge": "fail", "tier": "hard"},
+        {"id": "q01", "question": "Where is X?", "score": 2, "file_ok": True, "judge": "pass", "tier": "recall", "answer": "X is in [base.py:1-10]."},
+        {"id": "q02", "question": "How does Y work?", "score": 0, "file_ok": False, "judge": "fail", "tier": "hard", "answer": ""},
     ]
     md = format_results_md(rows)
     assert "| id |" in md
@@ -111,3 +111,5 @@ def test_format_results_md_structure():
     assert "Total: 2 / 4" in md
     assert "✓" in md
     assert "recall" in md
+    assert "### q01" in md
+    assert "X is in [base.py:1-10]." in md

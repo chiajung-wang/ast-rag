@@ -37,7 +37,9 @@ def _build_system_prompt(chunks) -> str:
         chunk_context = "(no chunks retrieved)"
     return (
         "You are a code assistant for the langchain-core codebase.\n\n"
-        "You MUST cite every factual claim with [path:start-end]. "
+        "For every symbol or concept you mention: (1) cite its location with [path:start-end], "
+        "(2) briefly explain what it does and its role in the codebase — its purpose, "
+        "key interface, and how it relates to other components. "
         "Never state a fact without a citation. "
         'If retrieved chunks do not support a claim, say "I don\'t have source for this" '
         "instead of stating it uncited.\n\n"

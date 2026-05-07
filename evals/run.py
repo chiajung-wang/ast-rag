@@ -33,6 +33,11 @@ def format_results_md(rows: list[dict]) -> str:
     total = sum(r["score"] for r in rows)
     max_total = len(rows) * 2
     lines.append(f"\nTotal: {total} / {max_total}")
+    lines.append("\n---\n")
+    for r in rows:
+        lines.append(f"### {r['id']} — {r['question']}\n")
+        lines.append(r.get("answer", "(no answer recorded)"))
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -87,6 +92,7 @@ def run(
 
     rows = []
     for q in questions:
+        answer = ""
         try:
             result = graph.invoke({
                 "messages": [HumanMessage(content=q["question"])],
@@ -105,7 +111,7 @@ def run(
             judge_str = "pass" if judge_pass else "fail"
         except Exception as exc:
             print(f"{q['id']}: ERROR — {exc!r}")
-            score, file_ok, judge_str = 0, False, "error"
+            score, file_ok, judge_str, answer = 0, False, "error", ""
         rows.append({
             "id": q["id"],
             "question": q["question"],
@@ -113,6 +119,7 @@ def run(
             "file_ok": file_ok,
             "judge": judge_str,
             "tier": q.get("tier", ""),
+            "answer": answer,
         })
         print(f"{q['id']}: score={score} file_ok={file_ok} judge={judge_str}")
         md = format_results_md(rows)
