@@ -48,4 +48,8 @@ Runs a tool-call loop (max 3 LLM round-trips). Each round: invoke LLM (model fro
 Parses `[path:start-end]` markers from answer text. Validates each via `db.chunk_exists_at(path, start, end)`. Strips invalid markers; appends `"*N citation(s) could not be verified and were removed.*"` footnote at end if any were stripped.
 
 ## Eval
-20 hand-crafted questions scored 0/1/2. Hybrid scoring: (1) auto-check `expected_file_path` present in citation markers (objective, free); (2) LLM-as-judge rates answer quality against `ground_truth_answer` (subjective, ~$0.10/full run). Results written to `evals/results.md` with per-question breakdown.
+20 hand-crafted questions scored 0/1/2. Hybrid scoring: (1) auto-check `expected_file_path` present in citation markers (objective, free); (2) LLM-as-judge (Claude Sonnet 4.6) rates answer quality against `ground_truth_answer` (subjective, ~$0.10/full run). Results written to `evals/results.md` with per-question breakdown.
+
+**Score rubric**: 2 = file_ok AND judge pass; 1 = one of the two passes; 0 = neither. Max total = 40.
+
+**Question schema** (`evals/questions.jsonl`): `id` (q01–q20), `question`, `expected_file_path` (short path, corpus root stripped), `ground_truth_answer`. Distribution: 8 easy / 8 medium / 4 hard.
