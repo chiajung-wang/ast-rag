@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+import json
 from evals.run import compute_score, check_file_ok, format_results_md, run
 
 
@@ -18,14 +19,19 @@ def test_score_neither():
     assert compute_score(file_ok=False, judge_pass=False) == 0
 
 
-def test_check_file_ok_present():
+def test_check_file_ok_first_path_matches():
     answer = "See [runnables/base.py:10-50] for details."
-    assert check_file_ok("runnables/base.py", answer) is True
+    assert check_file_ok(["runnables/base.py", "other.py"], answer) is True
 
 
-def test_check_file_ok_absent():
+def test_check_file_ok_second_path_matches():
+    answer = "See [runnables/base.py:10-50] for details."
+    assert check_file_ok(["missing.py", "runnables/base.py"], answer) is True
+
+
+def test_check_file_ok_none_match():
     answer = "See [other/file.py:1-5] for details."
-    assert check_file_ok("runnables/base.py", answer) is False
+    assert check_file_ok(["runnables/base.py"], answer) is False
 
 
 def test_run_writes_results_md(tmp_path):
@@ -33,12 +39,14 @@ def test_run_writes_results_md(tmp_path):
         {
             "id": "q01",
             "question": "Where is RunnableSequence defined?",
-            "expected_file_path": "runnables/base.py",
-            "ground_truth_answer": "It is in runnables/base.py.",
+            "expected_file_paths": ["runnables/base.py"],
+            "description_must_include": ["composition primitive for chaining runnables"],
+            "description_must_not_assert": [],
+            "tier": "recall",
+            "subsystem": "runnables",
         }
     ]
     questions_path = tmp_path / "questions.jsonl"
-    import json
     questions_path.write_text(json.dumps(questions[0]) + "\n")
     results_path = tmp_path / "results.md"
 
@@ -58,10 +66,39 @@ def test_run_writes_results_md(tmp_path):
     assert "Total:" in content
 
 
+def test_run_skips_meta_lines(tmp_path):
+    lines = [
+        json.dumps({"_meta": "header — skip me"}),
+        json.dumps({
+            "id": "q01",
+            "question": "Where is X?",
+            "expected_file_paths": ["runnables/base.py"],
+            "description_must_include": ["something"],
+            "description_must_not_assert": [],
+            "tier": "recall",
+            "subsystem": "runnables",
+        }),
+    ]
+    questions_path = tmp_path / "questions.jsonl"
+    questions_path.write_text("\n".join(lines) + "\n")
+    results_path = tmp_path / "results.md"
+
+    mock_graph = MagicMock()
+    mock_graph.invoke.return_value = {"messages": [MagicMock(content="answer [runnables/base.py:1-5]")]}
+    mock_judge_model = MagicMock()
+    mock_judge_model.invoke.return_value = MagicMock(content="pass")
+
+    with patch("evals.run.graph", mock_graph), \
+         patch("evals.run.ChatAnthropic", return_value=mock_judge_model):
+        run(str(questions_path), str(results_path))
+
+    assert mock_graph.invoke.call_count == 1
+
+
 def test_format_results_md_structure():
     rows = [
-        {"id": "q01", "question": "Where is X?", "score": 2, "file_ok": True, "judge": "pass"},
-        {"id": "q02", "question": "How does Y work?", "score": 0, "file_ok": False, "judge": "fail"},
+        {"id": "q01", "question": "Where is X?", "score": 2, "file_ok": True, "judge": "pass", "tier": "recall"},
+        {"id": "q02", "question": "How does Y work?", "score": 0, "file_ok": False, "judge": "fail", "tier": "hard"},
     ]
     md = format_results_md(rows)
     assert "| id |" in md
@@ -69,3 +106,4 @@ def test_format_results_md_structure():
     assert "| q02 |" in md
     assert "Total: 2 / 4" in md
     assert "✓" in md
+    assert "recall" in md

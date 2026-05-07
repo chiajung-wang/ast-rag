@@ -1,48 +1,54 @@
 from __future__ import annotations
 import json
-import os
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agent.graph import graph
+from evals.judge_prompt import JUDGE_SYSTEM
 
 JUDGE_MODEL = "claude-sonnet-4-6"
-JUDGE_SYSTEM = (
-    "You are an evaluation judge. Given a question, a ground truth answer, "
-    "and an agent answer, respond with exactly 'pass' if the agent answer is "
-    "substantially correct, or 'fail' otherwise. No explanation."
-)
 
 
 def compute_score(file_ok: bool, judge_pass: bool) -> int:
     return int(file_ok) + int(judge_pass)
 
 
-def check_file_ok(expected_path: str, answer: str) -> bool:
-    return expected_path in answer
+def check_file_ok(expected_paths: list[str], answer: str) -> bool:
+    return any(path in answer for path in expected_paths)
 
 
 def format_results_md(rows: list[dict]) -> str:
     lines = [
-        "| id | question | score | file_ok | judge |",
-        "|---|---|---|---|---|",
+        "| id | question | score | file_ok | judge | tier |",
+        "|---|---|---|---|---|---|",
     ]
     for r in rows:
         q_short = r["question"][:50] + ("..." if len(r["question"]) > 50 else "")
         file_sym = "✓" if r["file_ok"] else "✗"
-        lines.append(f"| {r['id']} | {q_short} | {r['score']} | {file_sym} | {r['judge']} |")
+        tier = r.get("tier", "")
+        lines.append(
+            f"| {r['id']} | {q_short} | {r['score']} | {file_sym} | {r['judge']} | {tier} |"
+        )
     total = sum(r["score"] for r in rows)
     max_total = len(rows) * 2
     lines.append(f"\nTotal: {total} / {max_total}")
     return "\n".join(lines)
 
 
-def _judge(question: str, ground_truth: str, answer: str) -> bool:
+def _judge(
+    question: str,
+    must_include: list[str],
+    must_not_assert: list[str],
+    answer: str,
+) -> bool:
     model = ChatAnthropic(model=JUDGE_MODEL)
+    must_include_str = "\n".join(f"- {item}" for item in must_include)
+    must_not_str = "\n".join(f"- {item}" for item in must_not_assert) if must_not_assert else "(none)"
     prompt = (
         f"Question: {question}\n\n"
-        f"Ground truth: {ground_truth}\n\n"
-        f"Agent answer: {answer}"
+        f"MUST_INCLUDE (all required):\n{must_include_str}\n\n"
+        f"MUST_NOT_ASSERT (automatic fail if present):\n{must_not_str}\n\n"
+        f"Agent answer:\n{answer}"
     )
     response = model.invoke([SystemMessage(content=JUDGE_SYSTEM), HumanMessage(content=prompt)])
     return response.content.strip().lower() == "pass"
@@ -53,7 +59,10 @@ def run(
     results_path: str = "evals/results.md",
 ) -> None:
     with open(questions_path) as f:
-        questions = [json.loads(line) for line in f if line.strip()]
+        questions = [
+            json.loads(line) for line in f
+            if line.strip() and not json.loads(line.strip()).get("_meta")
+        ]
 
     rows = []
     for q in questions:
@@ -62,8 +71,13 @@ def run(
             "retrieved_chunks": [],
         })
         answer = result["messages"][-1].content
-        file_ok = check_file_ok(q["expected_file_path"], answer)
-        judge_pass = _judge(q["question"], q["ground_truth_answer"], answer)
+        file_ok = check_file_ok(q["expected_file_paths"], answer)
+        judge_pass = _judge(
+            q["question"],
+            q["description_must_include"],
+            q.get("description_must_not_assert", []),
+            answer,
+        )
         score = compute_score(file_ok, judge_pass)
         rows.append({
             "id": q["id"],
@@ -71,6 +85,7 @@ def run(
             "score": score,
             "file_ok": file_ok,
             "judge": "pass" if judge_pass else "fail",
+            "tier": q.get("tier", ""),
         })
         print(f"{q['id']}: score={score} file_ok={file_ok} judge={'pass' if judge_pass else 'fail'}")
 

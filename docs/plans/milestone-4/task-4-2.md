@@ -2,43 +2,49 @@
 
 ## Goal
 
-Author `evals/questions.jsonl` with exactly 20 hand-crafted questions covering `langchain-core` source, spread across easy / medium / hard difficulty.
+Author `evals/questions.jsonl` with 30 hand-crafted questions covering `langchain-core` source, spread across recall / behavior / hard tiers.
 
 ## Acceptance Criteria
 
-- [ ] `evals/questions.jsonl` committed with exactly 20 entries.
-- [ ] Each entry has all four required fields (no extras needed).
-- [ ] Distribution: 8 easy, 8 medium, 4 hard.
-- [ ] `expected_file_path` values are valid short paths (corpus root stripped, matches index).
+- [x] `evals/questions.jsonl` committed with 30 question entries (plus `_meta` header lines).
+- [x] Each entry has all required fields.
+- [x] Covers recall, behavior, and hard tiers.
+- [x] `expected_file_paths` values are valid short paths (corpus root stripped, matches index).
 
 ## Schema
 
-Each line is a JSON object:
+Each question line is a JSON object. Lines with `_meta` key are header/instruction lines skipped by the runner.
 
 ```json
 {
   "id": "q01",
   "question": "Where is RunnableSequence defined?",
-  "expected_file_path": "runnables/base.py",
-  "ground_truth_answer": "RunnableSequence is defined in runnables/base.py. It is the core composition primitive created when you chain runnables with the | operator."
+  "expected_file_paths": ["runnables/base.py"],
+  "description_must_include": ["composition primitive for chaining runnables", "created by the | operator"],
+  "description_must_not_assert": [],
+  "tier": "recall",
+  "subsystem": "runnables"
 }
 ```
 
-- `id` — `q01`–`q20`, zero-padded
+- `id` — `q01`–`q30`, zero-padded
 - `question` — natural-language query as a user would type it
-- `expected_file_path` — short path (corpus root stripped), used for auto file-path check
-- `ground_truth_answer` — reference answer for LLM-as-judge scoring
+- `expected_file_paths` — list of acceptable short paths; model is correct if any appears in the answer
+- `description_must_include` — list of concepts the answer must cover (paraphrase OK)
+- `description_must_not_assert` — list of claims that must NOT appear (automatic judge fail if present)
+- `tier` — `recall` | `behavior` | `hard`
+- `subsystem` — for coverage tracking
 
-## Difficulty Guidelines
+## Tier Guidelines
 
-| Difficulty | Count | Characteristics |
-|---|---|---|
-| easy | 8 | Single well-known symbol, unambiguous file |
-| medium | 8 | Concept spans multiple symbols or requires reading docstrings |
-| hard | 4 | Subtle behavior, inheritance chain, or requires cross-file reasoning |
+| Tier | Characteristics |
+|---|---|
+| recall | Single well-known symbol, unambiguous file |
+| behavior | Concept spans multiple symbols or requires reading docstrings |
+| hard | Subtle behavior, inheritance chain, disambiguation, or cross-file reasoning |
 
 ## Steps
 
-- [x] Draft 20 questions covering diverse `langchain-core` symbols and concepts.
-- [x] Verify `expected_file_path` values exist in the index (run `python query.py` spot checks).
+- [x] Draft 30 questions covering diverse `langchain-core` symbols and concepts.
+- [x] Verify `expected_file_paths` values exist in the index.
 - [x] Write `evals/questions.jsonl`.

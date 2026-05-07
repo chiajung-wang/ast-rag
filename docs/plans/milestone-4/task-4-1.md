@@ -31,5 +31,5 @@ Build `app.py`: a Streamlit chat interface that invokes the LangGraph agent and 
 
 - [x] Write `app.py` with session state init, chat input loop, agent invocation.
 - [x] Add citation parser (regex `\[([^:\]\s]+):(\d+)-(\d+)\]`) and expander renderer.
-- [x] Verify `make run` launches and golden path works (ask "Where is Runnable defined?").
+- [x] Verify `make run` launches and golden path works (ask "Where is Runnable defined?"). Use `.venv/Scripts/python -m streamlit run app.py` if `make run` doesn't pick up the venv.
 - [x] Verify zero-citation answer renders without error.
