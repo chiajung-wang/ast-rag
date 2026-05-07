@@ -23,7 +23,7 @@ python query.py "Runnable definition"        # raw retrieval test
 | Layer | Choice |
 |---|---|
 | Agent | LangGraph (Python) — 2 nodes: `retrieve → answer` |
-| LLM | Claude Sonnet 4.6 (`claude-sonnet-4-6`) |
+| LLM | Claude — model set via `AGENT_MODEL` env var (default: `claude-haiku-4-5`) |
 | Embeddings | OpenAI `text-embedding-3-small` |
 | Storage | SQLite + `sqlite-vec` (one `.db` file, zero infrastructure) |
 | Parser | Python `ast` stdlib — function, class, and method granularity |
@@ -36,7 +36,7 @@ python query.py "Runnable definition"        # raw retrieval test
 Indexer (one-time) → SQLite+sqlite-vec (.db file)
                               ↑
 LangGraph Agent (2 nodes):
-  retrieve → answer (Claude Sonnet 4.6)
+  retrieve → answer (model from AGENT_MODEL env var)
        ↓
   Tools: search_corpus / find_symbol / read_file
        ↓

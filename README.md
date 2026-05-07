@@ -30,7 +30,7 @@ make index
 make run
 ```
 
-Requires `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in your environment.
+Requires `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in your environment. Set `AGENT_MODEL` to override the default LLM (default: `claude-haiku-4-5`).
 
 ## CLI usage
 
@@ -51,7 +51,7 @@ make eval
 |---|---|---|
 | 1 | Foundation & Indexer — storage, AST chunker, embedder, clone script, pipeline | ✅ Complete |
 | 2 | Hybrid Retrieval — BM25 + dense RRF | ✅ Complete |
-| 3 | LangGraph Agent — retrieve + answer nodes | Planned |
+| 3 | LangGraph Agent — retrieve + answer nodes | ✅ Complete |
 | 4 | Streamlit UI + citations | Planned |
 | 5 | Eval harness | Planned |
 
@@ -68,7 +68,7 @@ _Run `make eval` to generate._
 | Layer | Choice |
 |---|---|
 | Agent | LangGraph — 2 nodes: `retrieve → answer` |
-| LLM | Claude Sonnet 4.6 |
+| LLM | Claude (configurable via `AGENT_MODEL`, default `claude-haiku-4-5`) |
 | Embeddings | OpenAI `text-embedding-3-small` |
 | Storage | SQLite + `sqlite-vec` |
 | BM25 | `rank-bm25` |
