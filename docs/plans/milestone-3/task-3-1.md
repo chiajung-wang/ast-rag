@@ -5,11 +5,11 @@
 **Blocked by:** Milestone 2 complete (retrieval pipeline exists)
 
 **Acceptance criteria:**
-- [ ] `AgentState` has `messages: list[BaseMessage]` and `retrieved_chunks: list[Chunk]`
-- [ ] `retrieve_node` extracts last message content, calls `retrieve(query)`, returns `{"retrieved_chunks": chunks}`
-- [ ] `retrieve_node` uses the last message (not first) as the query
-- [ ] Empty retrieve result → `retrieved_chunks = []` (no error)
-- [ ] All tests pass
+- [x] `AgentState` has `messages: list[BaseMessage]` and `retrieved_chunks: list[Chunk]`
+- [x] `retrieve_node` extracts last message content, calls `retrieve(query)`, returns `{"retrieved_chunks": chunks}`
+- [x] `retrieve_node` uses the last message (not first) as the query
+- [x] Empty retrieve result → `retrieved_chunks = []` (no error)
+- [x] All tests pass
 
 ---
 
@@ -20,7 +20,7 @@
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_retrieve_node.py`:
 
@@ -79,7 +79,7 @@ def test_retrieve_node_empty_results():
     assert result["retrieved_chunks"] == []
 ```
 
-- [ ] **Step 2: Run tests — confirm failure**
+- [x] **Step 2: Run tests — confirm failure**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_retrieve_node.py -v
@@ -87,7 +87,7 @@ def test_retrieve_node_empty_results():
 
 Expected: `ModuleNotFoundError: No module named 'agent.state'`
 
-- [ ] **Step 3: Write `agent/state.py` and `agent/retrieve_node.py`**
+- [x] **Step 3: Write `agent/state.py` and `agent/retrieve_node.py`**
 
 `agent/state.py`:
 
@@ -117,7 +117,7 @@ def retrieve_node(state: AgentState) -> dict:
     return {"retrieved_chunks": chunks}
 ```
 
-- [ ] **Step 4: Run tests — confirm pass**
+- [x] **Step 4: Run tests — confirm pass**
 
 ```bash
 .venv\Scripts\python -m pytest tests/test_retrieve_node.py -v
@@ -125,7 +125,7 @@ def retrieve_node(state: AgentState) -> dict:
 
 Expected: all tests PASSED.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/state.py agent/retrieve_node.py tests/test_retrieve_node.py
