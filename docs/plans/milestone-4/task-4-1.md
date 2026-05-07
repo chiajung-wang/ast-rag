@@ -6,11 +6,11 @@ Build `app.py`: a Streamlit chat interface that invokes the LangGraph agent and 
 
 ## Acceptance Criteria
 
-- [ ] `make run` launches Streamlit at `localhost:8501` with a chat input.
-- [ ] Typing a question returns an agent answer displayed with markers intact in the prose.
-- [ ] Each `[path:start-end]` marker renders as a `st.expander` below the answer containing raw source lines in `st.code` and a GitHub permalink.
-- [ ] Conversation history persists across turns within the session.
-- [ ] No crash when answer has zero citation markers.
+- [x] `make run` launches Streamlit at `localhost:8501` with a chat input.
+- [x] Typing a question returns an agent answer displayed with markers intact in the prose.
+- [x] Each `[path:start-end]` marker renders as a `st.expander` below the answer containing raw source lines in `st.code` and a GitHub permalink.
+- [x] Conversation history persists across turns within the session.
+- [x] No crash when answer has zero citation markers.
 
 ## Design
 
@@ -29,7 +29,7 @@ Build `app.py`: a Streamlit chat interface that invokes the LangGraph agent and 
 
 ## Steps
 
-- [ ] Write `app.py` with session state init, chat input loop, agent invocation.
-- [ ] Add citation parser (regex `\[([^:\]\s]+):(\d+)-(\d+)\]`) and expander renderer.
-- [ ] Verify `make run` launches and golden path works (ask "Where is Runnable defined?").
-- [ ] Verify zero-citation answer renders without error.
+- [x] Write `app.py` with session state init, chat input loop, agent invocation.
+- [x] Add citation parser (regex `\[([^:\]\s]+):(\d+)-(\d+)\]`) and expander renderer.
+- [x] Verify `make run` launches and golden path works (ask "Where is Runnable defined?").
+- [x] Verify zero-citation answer renders without error.
