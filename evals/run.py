@@ -37,21 +37,30 @@ def format_results_md(rows: list[dict]) -> str:
 
 def _judge(
     question: str,
+    expected_file_paths: list[str],
     must_include: list[str],
     must_not_assert: list[str],
     answer: str,
 ) -> bool:
     model = ChatAnthropic(model=JUDGE_MODEL)
-    must_include_str = "\n".join(f"- {item}" for item in must_include)
-    must_not_str = "\n".join(f"- {item}" for item in must_not_assert) if must_not_assert else "(none)"
-    prompt = (
-        f"Question: {question}\n\n"
-        f"MUST_INCLUDE (all required):\n{must_include_str}\n\n"
-        f"MUST_NOT_ASSERT (automatic fail if present):\n{must_not_str}\n\n"
-        f"Agent answer:\n{answer}"
-    )
+    payload = {
+        "question": question,
+        "expected_file_paths": expected_file_paths,
+        "description_must_include": must_include,
+        "description_must_not_assert": must_not_assert,
+        "model_answer": answer,
+    }
+    prompt = json.dumps(payload, indent=2)
     response = model.invoke([SystemMessage(content=JUDGE_SYSTEM), HumanMessage(content=prompt)])
-    return response.content.strip().lower() == "pass"
+    raw = response.content.strip()
+    # strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = "\n".join(
+            line for line in raw.splitlines()
+            if not line.startswith("```")
+        ).strip()
+    verdict = json.loads(raw)
+    return bool(verdict.get("description_correct", False))
 
 
 def run(
@@ -74,6 +83,7 @@ def run(
         file_ok = check_file_ok(q["expected_file_paths"], answer)
         judge_pass = _judge(
             q["question"],
+            q["expected_file_paths"],
             q["description_must_include"],
             q.get("description_must_not_assert", []),
             answer,

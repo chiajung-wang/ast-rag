@@ -55,7 +55,9 @@ def test_run_writes_results_md(tmp_path):
     mock_graph.invoke.return_value = {"messages": [MagicMock(content=mock_answer)]}
 
     mock_judge_model = MagicMock()
-    mock_judge_model.invoke.return_value = MagicMock(content="pass")
+    mock_judge_model.invoke.return_value = MagicMock(
+        content='{"path_correct": true, "path_reasoning": "ok", "description_correct": true, "missing_concepts": [], "forbidden_assertions_made": [], "description_reasoning": "ok", "overall_correct": true, "more_precise_than_reference": false}'
+    )
 
     with patch("evals.run.graph", mock_graph), \
          patch("evals.run.ChatAnthropic", return_value=mock_judge_model):
@@ -86,7 +88,9 @@ def test_run_skips_meta_lines(tmp_path):
     mock_graph = MagicMock()
     mock_graph.invoke.return_value = {"messages": [MagicMock(content="answer [runnables/base.py:1-5]")]}
     mock_judge_model = MagicMock()
-    mock_judge_model.invoke.return_value = MagicMock(content="pass")
+    mock_judge_model.invoke.return_value = MagicMock(
+        content='{"path_correct": true, "path_reasoning": "ok", "description_correct": true, "missing_concepts": [], "forbidden_assertions_made": [], "description_reasoning": "ok", "overall_correct": true, "more_precise_than_reference": false}'
+    )
 
     with patch("evals.run.graph", mock_graph), \
          patch("evals.run.ChatAnthropic", return_value=mock_judge_model):
