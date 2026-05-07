@@ -39,6 +39,6 @@ Each line is a JSON object:
 
 ## Steps
 
-- [ ] Draft 20 questions covering diverse `langchain-core` symbols and concepts.
-- [ ] Verify `expected_file_path` values exist in the index (run `python query.py` spot checks).
-- [ ] Write `evals/questions.jsonl`.
+- [x] Draft 20 questions covering diverse `langchain-core` symbols and concepts.
+- [x] Verify `expected_file_path` values exist in the index (run `python query.py` spot checks).
+- [x] Write `evals/questions.jsonl`.
