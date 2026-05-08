@@ -51,8 +51,12 @@ def test_run_writes_results_md(tmp_path):
     results_path = tmp_path / "results.md"
 
     mock_answer = "RunnableSequence is in [runnables/base.py:10-50]."
+    mock_last_msg = MagicMock()
+    mock_last_msg.content = mock_answer
+    mock_last_msg.usage_metadata = {"input_tokens": 100, "output_tokens": 50}
+    mock_last_msg.additional_kwargs = {"tool_trace": [], "budget_exhausted": False}
     mock_graph = MagicMock()
-    mock_graph.invoke.return_value = {"messages": [MagicMock(content=mock_answer)]}
+    mock_graph.invoke.return_value = {"messages": [mock_last_msg]}
 
     mock_judge_model = MagicMock()
     mock_judge_model.invoke.return_value = MagicMock(
@@ -62,12 +66,12 @@ def test_run_writes_results_md(tmp_path):
 
     with patch("evals.run.graph", mock_graph), \
          patch("evals.run.ChatAnthropic", return_value=mock_judge_model):
-        run(str(questions_path), str(results_path))
+        run(str(questions_path), str(results_path), n_runs=1)
 
     content = results_path.read_text(encoding="utf-8")
     assert "q01" in content
-    assert "Total:" in content
-    assert "Cost:" in content
+    assert "Median total:" in content
+    assert "Agent:" in content
     assert "$" in content
 
 
@@ -88,8 +92,12 @@ def test_run_skips_meta_lines(tmp_path):
     questions_path.write_text("\n".join(lines) + "\n")
     results_path = tmp_path / "results.md"
 
+    mock_last_msg = MagicMock()
+    mock_last_msg.content = "answer [runnables/base.py:1-5]"
+    mock_last_msg.usage_metadata = {"input_tokens": 100, "output_tokens": 50}
+    mock_last_msg.additional_kwargs = {"tool_trace": [], "budget_exhausted": False}
     mock_graph = MagicMock()
-    mock_graph.invoke.return_value = {"messages": [MagicMock(content="answer [runnables/base.py:1-5]")]}
+    mock_graph.invoke.return_value = {"messages": [mock_last_msg]}
     mock_judge_model = MagicMock()
     mock_judge_model.invoke.return_value = MagicMock(
         content='{"path_correct": true, "path_reasoning": "ok", "description_correct": true, "missing_concepts": [], "forbidden_assertions_made": [], "description_reasoning": "ok", "overall_correct": true, "more_precise_than_reference": false}',
@@ -98,23 +106,24 @@ def test_run_skips_meta_lines(tmp_path):
 
     with patch("evals.run.graph", mock_graph), \
          patch("evals.run.ChatAnthropic", return_value=mock_judge_model):
-        run(str(questions_path), str(results_path))
+        run(str(questions_path), str(results_path), n_runs=1)
 
     assert mock_graph.invoke.call_count == 1
 
 
 def test_format_results_md_structure():
+    run1 = {"score": 2, "file_ok": True, "judge": "pass", "agent_cost": 0.0012, "judge_cost": 0.0003, "answer": "X is in [base.py:1-10].", "tool_trace": []}
+    run2 = {"score": 0, "file_ok": False, "judge": "fail", "agent_cost": 0.0, "judge_cost": 0.0, "answer": "", "tool_trace": []}
     rows = [
-        {"id": "q01", "question": "Where is X?", "score": 2, "file_ok": True, "judge": "pass", "tier": "recall", "answer": "X is in [base.py:1-10].", "cost": 0.0012},
-        {"id": "q02", "question": "How does Y work?", "score": 0, "file_ok": False, "judge": "fail", "tier": "hard", "answer": "", "cost": 0.0},
+        {"id": "q01", "question": "Where is X?", "tier": "recall", "median_score": 2.0, "variance": 0.0, "agent_cost": 0.0012, "judge_cost": 0.0003, "runs": [run1]},
+        {"id": "q02", "question": "How does Y work?", "tier": "hard", "median_score": 0.0, "variance": 0.0, "agent_cost": 0.0, "judge_cost": 0.0, "runs": [run2]},
     ]
-    md = format_results_md(rows)
+    md = format_results_md(rows, n_runs=1)
     assert "| id |" in md
     assert "| q01 |" in md
     assert "| q02 |" in md
-    assert "Total: 2 / 4" in md
-    assert "Cost:" in md
-    assert "✓" in md
+    assert "Median total:" in md
+    assert "Agent:" in md
     assert "recall" in md
     assert "### q01" in md
     assert "X is in [base.py:1-10]." in md
