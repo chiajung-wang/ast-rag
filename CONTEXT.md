@@ -48,4 +48,8 @@ Runs a tool-call loop (max 3 LLM round-trips). Each round: invoke LLM (model fro
 Parses `[path:start-end]` markers from answer text. Validates each via `db.chunk_exists_at(path, start, end)`. Strips invalid markers; appends `"*N citation(s) could not be verified and were removed.*"` footnote at end if any were stripped.
 
 ## Eval
-20 hand-crafted questions scored 0/1/2. Hybrid scoring: (1) auto-check `expected_file_path` present in citation markers (objective, free); (2) LLM-as-judge rates answer quality against `ground_truth_answer` (subjective, ~$0.10/full run). Results written to `evals/results.md` with per-question breakdown.
+30 hand-crafted questions scored 0/1/2. Hybrid scoring: (1) auto-check any path in `expected_file_paths` appears in citation markers (objective, free); (2) LLM-as-judge (Claude Sonnet 4.6) rates answer quality against `description_must_include` / `description_must_not_assert` (subjective, ~$0.10/full run). Results written to `evals/results.md` with per-question breakdown.
+
+**Score rubric**: 2 = file_ok AND judge pass; 1 = one of the two passes; 0 = neither. Max total = 60.
+
+**Question schema** (`evals/questions.jsonl`): `id`, `question`, `expected_file_paths` (list — model is correct if any path appears in answer), `description_must_include` (list of required concepts), `description_must_not_assert` (list of banned claims), `tier` (`recall` | `behavior` | `hard`), `subsystem`. Lines with `_meta` key are header/instruction lines and are skipped by the runner. Distribution: recall / behavior / hard tiers.

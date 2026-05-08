@@ -17,9 +17,9 @@
 1. `make run` launches Streamlit. Browser at `localhost:8501` shows a chat input.
 2. Typing "Where is Runnable defined?" returns an answer with ≥1 citation expander.
 3. Clicking a citation expander shows source code and a GitHub link.
-4. `evals/questions.jsonl` committed with exactly 20 questions (8 easy / 8 medium / 4 hard).
-5. `make eval` completes without error and writes `evals/results.md`.
-6. `evals/results.md` contains per-question scores and a summary line.
+4. `evals/questions.jsonl` committed with 34 questions across 6 tiers (recall / behavior / hard / definition / usage / cross-file / negative).
+5. `make eval` completes without error and writes `evals/results/results-<timestamp>-<agent>-<judge>.md`.
+6. Results file contains per-question median score, variance, file_ok%, judge%, separate agent/judge costs, and per-run tool traces.
 
 ---
 
@@ -32,6 +32,10 @@
 | 4.3 | Eval runner | `evals/run.py`, `tests/test_eval_runner.py` |
 
 ---
+
+## Baseline Eval Results (haiku-4-5 agent, sonnet-4-6 judge, n=1)
+
+63 / 67 (94%) across 34 questions. Failures: q01 (recall, misses `|` operator mention), q16/q20 (behavior, judge variance), q29 (hard, misses community-vs-core boundary claim).
 
 ## What Milestone 5 Depends On
 
