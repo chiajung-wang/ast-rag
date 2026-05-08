@@ -126,6 +126,20 @@ class DB:
         rows = self.conn.execute("SELECT symbol_name FROM chunks").fetchall()
         return {r["symbol_name"] for r in rows}
 
+    def class_outline(self, class_name: str) -> list[Chunk]:
+        rows = self.conn.execute(
+            """
+            SELECT id, file_path, symbol_name, symbol_type, parent_class,
+                   line_start, line_end, docstring, text, embed_text
+            FROM chunks
+            WHERE (lower(symbol_name) = lower(?) AND symbol_type = 'class')
+               OR lower(parent_class) = lower(?)
+            ORDER BY line_start
+            """,
+            (class_name, class_name),
+        ).fetchall()
+        return [_row_to_chunk(r) for r in rows]
+
 
 def _row_to_chunk(row: sqlite3.Row) -> Chunk:
     return Chunk(

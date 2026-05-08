@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import os
+import statistics
 import time
 from datetime import datetime
 from pathlib import Path
@@ -19,11 +20,12 @@ _PRICES: dict[str, tuple[float, float]] = {
     "claude-opus-4-7": (15.00, 75.00),
 }
 
+
 def _price_per_mtok(model: str) -> tuple[float, float]:
     for prefix, rates in _PRICES.items():
         if model.startswith(prefix):
             return rates
-    return (3.00, 15.00)  # fallback: sonnet rates
+    return (3.00, 15.00)
 
 
 def compute_cost(model: str, input_tokens: int, output_tokens: int) -> float:
@@ -39,29 +41,46 @@ def check_file_ok(expected_paths: list[str], answer: str) -> bool:
     return any(path in answer for path in expected_paths)
 
 
-def format_results_md(rows: list[dict]) -> str:
+def format_results_md(rows: list[dict], n_runs: int) -> str:
     lines = [
-        "| id | question | score | file_ok | judge | tier | cost |",
-        "|---|---|---|---|---|---|---|",
+        "| id | question | median | var | file_ok% | judge% | tier | agent_cost | judge_cost |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         q_short = r["question"][:50] + ("..." if len(r["question"]) > 50 else "")
-        file_sym = "✓" if r["file_ok"] else "✗"
-        tier = r.get("tier", "")
-        cost = r.get("cost", 0.0)
+        runs = r["runs"]
+        file_pct = f"{sum(1 for x in runs if x['file_ok']) / len(runs):.0%}"
+        judge_pct = f"{sum(1 for x in runs if x['judge'] == 'pass') / len(runs):.0%}"
         lines.append(
-            f"| {r['id']} | {q_short} | {r['score']} | {file_sym} | {r['judge']} | {tier} | ${cost:.4f} |"
+            f"| {r['id']} | {q_short} | {r['median_score']} | {r['variance']:.2f}"
+            f" | {file_pct} | {judge_pct} | {r['tier']}"
+            f" | ${r['agent_cost']:.4f} | ${r['judge_cost']:.4f} |"
         )
-    total = sum(r["score"] for r in rows)
+    total_agent = sum(r["agent_cost"] for r in rows)
+    total_judge = sum(r["judge_cost"] for r in rows)
+    total_median = sum(r["median_score"] for r in rows)
     max_total = len(rows) * 2
-    total_cost = sum(r.get("cost", 0.0) for r in rows)
-    lines.append(f"\nTotal: {total} / {max_total} — Cost: ${total_cost:.4f}")
+    lines.append(
+        f"\nMedian total: {total_median:.1f} / {max_total}"
+        f" — Agent: ${total_agent:.4f}  Judge: ${total_judge:.4f}"
+        f"  Total: ${total_agent + total_judge:.4f}"
+    )
     lines.append("\n---\n")
     for r in rows:
-        cost = r.get("cost", 0.0)
-        lines.append(f"### {r['id']} — {r['question']} (${cost:.4f})\n")
-        lines.append(r.get("answer", "(no answer recorded)"))
-        lines.append("")
+        lines.append(f"### {r['id']} — {r['question']}\n")
+        for i, run in enumerate(r["runs"], 1):
+            lines.append(
+                f"**Run {i}**: score={run['score']} file_ok={run['file_ok']}"
+                f" judge={run['judge']} agent=${run['agent_cost']:.4f} judge=${run['judge_cost']:.4f}"
+            )
+            trace = run.get("tool_trace", [])
+            if trace:
+                for t in trace:
+                    args_str = ", ".join(f"{k}={v!r}" for k, v in t["args"].items())
+                    lines.append(f"  r{t['round']}: {t['tool']}({args_str})")
+            lines.append("")
+            lines.append(run.get("answer", "(no answer)"))
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -73,7 +92,7 @@ def _judge(
     answer: str,
     max_retries: int = 3,
 ) -> tuple[bool, int, int]:
-    model = ChatAnthropic(model=JUDGE_MODEL)
+    model = ChatAnthropic(model=JUDGE_MODEL, temperature=0)
     payload = {
         "question": question,
         "expected_file_paths": expected_file_paths,
@@ -109,11 +128,57 @@ def _judge(
                 return False, 0, 0
 
 
+def _run_once(q: dict) -> dict:
+    answer = ""
+    agent_cost = 0.0
+    judge_cost = 0.0
+    score = 0
+    file_ok = False
+    judge_str = "error"
+    try:
+        result = graph.invoke({
+            "messages": [HumanMessage(content=q["question"])],
+            "retrieved_chunks": [],
+        })
+        last_msg = result["messages"][-1]
+        answer = last_msg.content
+        usage = last_msg.usage_metadata or {}
+        agent_cost = compute_cost(
+            AGENT_MODEL,
+            usage.get("input_tokens", 0),
+            usage.get("output_tokens", 0),
+        )
+        tool_trace = last_msg.additional_kwargs.get("tool_trace", [])
+        file_ok = check_file_ok(q["expected_file_paths"], answer)
+        judge_pass, judge_in, judge_out = _judge(
+            q["question"],
+            q["expected_file_paths"],
+            q["description_must_include"],
+            q.get("description_must_not_assert", []),
+            answer,
+        )
+        judge_cost = compute_cost(JUDGE_MODEL, judge_in, judge_out)
+        score = compute_score(file_ok, judge_pass)
+        judge_str = "pass" if judge_pass else "fail"
+    except Exception as exc:
+        print(f"    ERROR: {exc!r}")
+    return {
+        "score": score,
+        "file_ok": file_ok,
+        "judge": judge_str,
+        "agent_cost": agent_cost,
+        "judge_cost": judge_cost,
+        "answer": answer,
+        "tool_trace": tool_trace,
+    }
+
+
 def run(
     questions_path: str = "evals/questions.jsonl",
     results_path: str = "evals/results.md",
     start: int = 1,
     end: int | None = None,
+    n_runs: int = 3,
 ) -> None:
     with open(questions_path) as f:
         questions = [
@@ -122,54 +187,47 @@ def run(
         ]
     questions = questions[start - 1 : end]
 
-    print(f"agent={AGENT_MODEL}  judge={JUDGE_MODEL}  questions={len(questions)}")
+    print(f"agent={AGENT_MODEL}  judge={JUDGE_MODEL}  temperature=0  runs={n_runs}  questions={len(questions)}")
     rows = []
-    for q in questions:
-        answer = ""
-        cost = 0.0
-        try:
-            result = graph.invoke({
-                "messages": [HumanMessage(content=q["question"])],
-                "retrieved_chunks": [],
-            })
-            last_msg = result["messages"][-1]
-            answer = last_msg.content
-            usage = last_msg.usage_metadata or {}
-            agent_cost = compute_cost(
-                AGENT_MODEL,
-                usage.get("input_tokens", 0),
-                usage.get("output_tokens", 0),
+    try:
+        for q in questions:
+            print(f"{q['id']}:")
+            runs = []
+            for i in range(n_runs):
+                r = _run_once(q)
+                runs.append(r)
+                print(
+                    f"  run {i + 1}: score={r['score']} file_ok={r['file_ok']}"
+                    f" judge={r['judge']} agent=${r['agent_cost']:.4f} judge=${r['judge_cost']:.4f}"
+                )
+
+            scores = [r["score"] for r in runs]
+            median_score = statistics.median(scores)
+            variance = statistics.variance(scores) if len(scores) > 1 else 0.0
+            agent_cost_total = sum(r["agent_cost"] for r in runs)
+            judge_cost_total = sum(r["judge_cost"] for r in runs)
+            print(
+                f"  → median={median_score} var={variance:.2f}"
+                f" agent=${agent_cost_total:.4f} judge=${judge_cost_total:.4f}"
             )
 
-            file_ok = check_file_ok(q["expected_file_paths"], answer)
-            judge_pass, judge_in, judge_out = _judge(
-                q["question"],
-                q["expected_file_paths"],
-                q["description_must_include"],
-                q.get("description_must_not_assert", []),
-                answer,
-            )
-            judge_cost = compute_cost(JUDGE_MODEL, judge_in, judge_out)
-            cost = agent_cost + judge_cost
-            score = compute_score(file_ok, judge_pass)
-            judge_str = "pass" if judge_pass else "fail"
-        except BaseException as exc:
-            print(f"{q['id']}: ERROR — {exc!r}")
-            score, file_ok, judge_str, answer = 0, False, "error", ""
-        rows.append({
-            "id": q["id"],
-            "question": q["question"],
-            "score": score,
-            "file_ok": file_ok,
-            "judge": judge_str,
-            "tier": q.get("tier", ""),
-            "answer": answer,
-            "cost": cost,
-        })
-        print(f"{q['id']}: score={score} file_ok={file_ok} judge={judge_str} cost=${cost:.4f}")
-        md = format_results_md(rows)
-        with open(results_path, "w", encoding="utf-8") as f:
-            f.write(md)
+            rows.append({
+                "id": q["id"],
+                "question": q["question"],
+                "median_score": median_score,
+                "variance": variance,
+                "runs": runs,
+                "tier": q.get("tier", ""),
+                "agent_cost": agent_cost_total,
+                "judge_cost": judge_cost_total,
+            })
+            md = format_results_md(rows, n_runs)
+            with open(results_path, "w", encoding="utf-8") as f:
+                f.write(md)
+
+    except KeyboardInterrupt:
+        print(f"\nInterrupted — partial results written to {results_path}")
+        return
 
     print(f"\nResults written to {results_path}")
 
@@ -177,8 +235,9 @@ def run(
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--start", type=int, default=1, help="First question number (1-based, inclusive)")
-    parser.add_argument("--end", type=int, default=None, help="Last question number (1-based, inclusive)")
+    parser.add_argument("--start", type=int, default=1)
+    parser.add_argument("--end", type=int, default=None)
+    parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--questions", default="evals/questions.jsonl")
     parser.add_argument("--results-dir", default="evals/results")
     args = parser.parse_args()
@@ -188,4 +247,4 @@ if __name__ == "__main__":
     agent_slug = AGENT_MODEL.split("claude-")[-1].split("-2")[0]
     judge_slug = JUDGE_MODEL.split("claude-")[-1].split("-2")[0]
     results_path = str(results_dir / f"results-{timestamp}-{agent_slug}-{judge_slug}.md")
-    run(args.questions, results_path, args.start, args.end)
+    run(args.questions, results_path, args.start, args.end, args.runs)

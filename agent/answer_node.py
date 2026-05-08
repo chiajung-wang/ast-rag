@@ -22,6 +22,25 @@ def _get_db() -> DB:
 
 
 @tool
+def get_class_outline(class_name: str) -> str:
+    """Return all method signatures and line ranges for a class.
+
+    Call this before read_file to get a map of which methods exist and where,
+    then use read_file on the specific methods you need.
+    """
+    db = _get_db()
+    chunks = db.class_outline(class_name)
+    if not chunks:
+        return f"No class '{class_name}' found in corpus."
+    lines = []
+    for c in chunks:
+        sig = c.text.splitlines()[0] if c.text else ""
+        doc = f"  # {c.docstring.splitlines()[0][:80]}" if c.docstring else ""
+        lines.append(f"[{c.file_path}:{c.line_start}-{c.line_end}] {sig}{doc}")
+    return "\n".join(lines)
+
+
+@tool
 def read_file(path: str, line_start: int, line_end: int) -> str:
     """Read source lines from the langchain-core corpus."""
     return _read_file(path, line_start, line_end)
@@ -37,14 +56,15 @@ def _build_system_prompt(chunks) -> str:
         chunk_context = "(no chunks retrieved)"
     return (
         "You are a code assistant for the langchain-core codebase.\n\n"
-        "STEP 1 — Before writing your answer, call read_file on the relevant source file "
-        "to read the complete class or function definition. Retrieved chunks may be truncated "
-        "and miss critical details. Read enough lines to see the full class body.\n\n"
-        "STEP 1b — If the class or function references other types (e.g. TypedDicts, "
-        "dataclasses, field types, parent classes defined elsewhere), call read_file on "
-        "those files too to discover their fields and structure.\n\n"
-        "STEP 1c — To understand sync vs async execution differences, read the .invoke() "
-        "and .ainvoke() (or equivalent) method bodies, not just the class-level docstring.\n\n"
+        "STEP 1 — Call get_class_outline on the relevant class first. This returns ALL "
+        "method signatures and line ranges in one shot — use it to map the class before "
+        "reading anything. For standalone functions, call read_file directly.\n\n"
+        "STEP 1b — After reviewing the outline: call read_file on every method relevant "
+        "to the question. For async behavior, read both sync (invoke) and async (ainvoke) "
+        "bodies. If the outline reveals an Async* sibling class (e.g. AsyncCallbackHandler), "
+        "call get_class_outline on it too — async counterparts live there.\n\n"
+        "STEP 1c — If the class references other types (TypedDicts, parent classes, field "
+        "types defined elsewhere), call get_class_outline or read_file on those too.\n\n"
         "STEP 2 — When answering, be exhaustive. Enumerate:\n"
         "- All fields / attributes and their types (read referenced TypedDicts/dataclasses for sub-fields)\n"
         "- All abstract or required methods subclasses must implement\n"
@@ -61,13 +81,14 @@ def _build_system_prompt(chunks) -> str:
 
 def answer_node(state: AgentState) -> dict:
     model_name = os.environ.get("AGENT_MODEL", "claude-haiku-4-5")
-    model = ChatAnthropic(model=model_name).bind_tools([read_file])
+    model = ChatAnthropic(model=model_name, temperature=0).bind_tools([get_class_outline, read_file])
     system = SystemMessage(content=_build_system_prompt(state["retrieved_chunks"]))
     messages: list = [system] + list(state["messages"])
 
     response = None
     total_input_tokens = 0
     total_output_tokens = 0
+    tool_trace: list[dict] = []
 
     def _add_usage(r):
         nonlocal total_input_tokens, total_output_tokens
@@ -75,14 +96,16 @@ def answer_node(state: AgentState) -> dict:
         total_input_tokens += u.get("input_tokens", 0)
         total_output_tokens += u.get("output_tokens", 0)
 
-    for _ in range(MAX_TOOL_ROUNDS):
+    for round_num in range(MAX_TOOL_ROUNDS):
         response = model.invoke(messages)
         _add_usage(response)
         if not response.tool_calls:
             break
         messages.append(response)
         for tc in response.tool_calls:
-            result = read_file.invoke(tc["args"])
+            fn = get_class_outline if tc["name"] == "get_class_outline" else read_file
+            result = fn.invoke(tc["args"])
+            tool_trace.append({"round": round_num + 1, "tool": tc["name"], "args": tc["args"]})
             messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
     else:
         messages.append(HumanMessage(content=(
@@ -90,7 +113,7 @@ def answer_node(state: AgentState) -> dict:
             "context already gathered. Do not request any more tools. "
             "Cite with [path:start-end] for every claim."
         )))
-        model_no_tools = ChatAnthropic(model=model_name)
+        model_no_tools = ChatAnthropic(model=model_name, temperature=0)
         response = model_no_tools.invoke(messages)
         _add_usage(response)
 
@@ -103,6 +126,11 @@ def answer_node(state: AgentState) -> dict:
     validated = validate_citations(content, _get_db())
     final = AIMessage(
         content=validated,
-        usage_metadata={"input_tokens": total_input_tokens, "output_tokens": total_output_tokens},
+        usage_metadata={
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "total_tokens": total_input_tokens + total_output_tokens,
+        },
+        additional_kwargs={"tool_trace": tool_trace},
     )
     return {"messages": list(state["messages"]) + [final]}
