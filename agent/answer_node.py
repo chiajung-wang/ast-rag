@@ -9,7 +9,7 @@ from agent.state import AgentState
 from agent.citations import validate_citations
 from indexer.corpus_config import DB_PATH
 
-MAX_TOOL_ROUNDS = 5
+MAX_TOOL_ROUNDS = 8
 
 _db: DB | None = None
 
@@ -59,16 +59,25 @@ def _build_system_prompt(chunks) -> str:
         "STEP 1 — Call get_class_outline on the relevant class first. This returns ALL "
         "method signatures and line ranges in one shot — use it to map the class before "
         "reading anything. For standalone functions, call read_file directly.\n\n"
-        "STEP 1b — After reviewing the outline: call read_file on every method relevant "
-        "to the question. For async behavior, read both sync (invoke) and async (ainvoke) "
-        "bodies. If the outline reveals an Async* sibling class (e.g. AsyncCallbackHandler), "
-        "call get_class_outline on it too — async counterparts live there.\n\n"
-        "STEP 1c — If the class references other types (TypedDicts, parent classes, field "
+        "STEP 1b — Before reading ANY source lines, batch ALL related get_class_outline calls "
+        "in the SAME round as you process the first outline result:\n"
+        "  • Async sibling: for Base* classes drop the 'Base' prefix to get the async name "
+        "(e.g. BaseCallbackHandler → AsyncCallbackHandler, BaseRunManager → AsyncRunManager). "
+        "ALWAYS call get_class_outline on the async sibling — it holds async def versions of "
+        "all sync events and MUST be included when the question asks about events or methods.\n"
+        "  • All mixin/parent classes listed in the class definition\n"
+        "Call all of these BEFORE calling read_file on anything. One batch, one round.\n\n"
+        "STEP 1c — After reviewing outlines: call read_file on every method relevant to "
+        "the question. For questions about 'what methods must subclasses implement' or "
+        "'what does this class expose', read EVERY method in the outline that is either: "
+        "(a) decorated @abstractmethod, (b) raises NotImplementedError, or (c) documented "
+        "as an override point. Do not stop after finding the first abstract method.\n\n"
+        "STEP 1d — If any class references other types (TypedDicts, parent classes, field "
         "types defined elsewhere), call get_class_outline or read_file on those too.\n\n"
         "STEP 2 — When answering, be exhaustive. Enumerate:\n"
         "- All fields / attributes and their types (read referenced TypedDicts/dataclasses for sub-fields)\n"
-        "- All abstract or required methods subclasses must implement\n"
-        "- Both sync and async method variants (e.g. invoke/ainvoke, on_*/aon_*)\n"
+        "- ALL abstract or required methods subclasses must implement (check every @abstractmethod in outline)\n"
+        "- Both sync and async method variants (e.g. invoke/ainvoke, on_*/async on_*)\n"
         "- Configuration flags and their effect on runtime behavior (check parent classes too)\n"
         "- Sync vs async execution differences (e.g. thread pool for sync, coroutine for async)\n\n"
         "For every symbol or concept: (1) cite with [path:start-end], "
@@ -96,6 +105,7 @@ def answer_node(state: AgentState) -> dict:
         total_input_tokens += u.get("input_tokens", 0)
         total_output_tokens += u.get("output_tokens", 0)
 
+    budget_exhausted = False
     for round_num in range(MAX_TOOL_ROUNDS):
         response = model.invoke(messages)
         _add_usage(response)
@@ -108,6 +118,7 @@ def answer_node(state: AgentState) -> dict:
             tool_trace.append({"round": round_num + 1, "tool": tc["name"], "args": tc["args"]})
             messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
     else:
+        budget_exhausted = True
         messages.append(HumanMessage(content=(
             "Tool budget exhausted. Write your final answer NOW using only the "
             "context already gathered. Do not request any more tools. "
@@ -131,6 +142,6 @@ def answer_node(state: AgentState) -> dict:
             "output_tokens": total_output_tokens,
             "total_tokens": total_input_tokens + total_output_tokens,
         },
-        additional_kwargs={"tool_trace": tool_trace},
+        additional_kwargs={"tool_trace": tool_trace, "budget_exhausted": budget_exhausted},
     )
     return {"messages": list(state["messages"]) + [final]}

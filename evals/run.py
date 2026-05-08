@@ -149,6 +149,7 @@ def _run_once(q: dict) -> dict:
             usage.get("output_tokens", 0),
         )
         tool_trace = last_msg.additional_kwargs.get("tool_trace", [])
+        budget_exhausted = last_msg.additional_kwargs.get("budget_exhausted", False)
         file_ok = check_file_ok(q["expected_file_paths"], answer)
         judge_pass, judge_in, judge_out = _judge(
             q["question"],
@@ -159,7 +160,12 @@ def _run_once(q: dict) -> dict:
         )
         judge_cost = compute_cost(JUDGE_MODEL, judge_in, judge_out)
         score = compute_score(file_ok, judge_pass)
-        judge_str = "pass" if judge_pass else "fail"
+        if judge_pass:
+            judge_str = "pass"
+        elif budget_exhausted:
+            judge_str = "fail/exhausted"
+        else:
+            judge_str = "fail"
     except Exception as exc:
         print(f"    ERROR: {exc!r}")
     return {
