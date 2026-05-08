@@ -38,7 +38,11 @@ Rules:
 
 5. `overall_correct = path_correct AND description_correct`.
 
-6. Keep reasoning to one sentence per field. The grader is itself being evaluated on consistency, not eloquence.
+6. **Negative questions** (`expected_file_paths` is an empty list `[]`): these verify the model correctly refuses when the topic is not in the corpus.
+   - `path_correct = true` if the model does NOT assert a corpus file path (no hallucinated citations). False if it fabricates a path.
+   - `description_correct = true` if the model explicitly says the answer is not in the corpus / not in langchain-core / refers the user to an external package. False if the model fabricates an answer or makes definitive claims about where the thing is defined.
+
+7. Keep reasoning to one sentence per field. The grader is itself being evaluated on consistency, not eloquence.
 
 ---
 

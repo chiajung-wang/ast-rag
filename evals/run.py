@@ -49,7 +49,8 @@ def format_results_md(rows: list[dict], n_runs: int) -> str:
     for r in rows:
         q_short = r["question"][:50] + ("..." if len(r["question"]) > 50 else "")
         runs = r["runs"]
-        file_pct = f"{sum(1 for x in runs if x['file_ok']) / len(runs):.0%}"
+        is_negative = r["tier"] == "negative"
+        file_pct = "n/a" if is_negative else f"{sum(1 for x in runs if x['file_ok']) / len(runs):.0%}"
         judge_pct = f"{sum(1 for x in runs if x['judge'] == 'pass') / len(runs):.0%}"
         lines.append(
             f"| {r['id']} | {q_short} | {r['median_score']} | {r['variance']:.2f}"
@@ -59,7 +60,7 @@ def format_results_md(rows: list[dict], n_runs: int) -> str:
     total_agent = sum(r["agent_cost"] for r in rows)
     total_judge = sum(r["judge_cost"] for r in rows)
     total_median = sum(r["median_score"] for r in rows)
-    max_total = len(rows) * 2
+    max_total = sum(1 if r["tier"] == "negative" else 2 for r in rows)
     lines.append(
         f"\nMedian total: {total_median:.1f} / {max_total}"
         f" — Agent: ${total_agent:.4f}  Judge: ${total_judge:.4f}"
