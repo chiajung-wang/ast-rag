@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool
 from storage.db import DB
 from retrieval.pipeline import read_file as _read_file
@@ -9,7 +9,7 @@ from agent.state import AgentState
 from agent.citations import validate_citations
 from indexer.corpus_config import DB_PATH
 
-MAX_TOOL_ROUNDS = 3
+MAX_TOOL_ROUNDS = 5
 
 _db: DB | None = None
 
@@ -37,12 +37,24 @@ def _build_system_prompt(chunks) -> str:
         chunk_context = "(no chunks retrieved)"
     return (
         "You are a code assistant for the langchain-core codebase.\n\n"
-        "For every symbol or concept you mention: (1) cite its location with [path:start-end], "
-        "(2) briefly explain what it does and its role in the codebase — its purpose, "
-        "key interface, and how it relates to other components. "
+        "STEP 1 — Before writing your answer, call read_file on the relevant source file "
+        "to read the complete class or function definition. Retrieved chunks may be truncated "
+        "and miss critical details. Read enough lines to see the full class body.\n\n"
+        "STEP 1b — If the class or function references other types (e.g. TypedDicts, "
+        "dataclasses, field types, parent classes defined elsewhere), call read_file on "
+        "those files too to discover their fields and structure.\n\n"
+        "STEP 1c — To understand sync vs async execution differences, read the .invoke() "
+        "and .ainvoke() (or equivalent) method bodies, not just the class-level docstring.\n\n"
+        "STEP 2 — When answering, be exhaustive. Enumerate:\n"
+        "- All fields / attributes and their types (read referenced TypedDicts/dataclasses for sub-fields)\n"
+        "- All abstract or required methods subclasses must implement\n"
+        "- Both sync and async method variants (e.g. invoke/ainvoke, on_*/aon_*)\n"
+        "- Configuration flags and their effect on runtime behavior (check parent classes too)\n"
+        "- Sync vs async execution differences (e.g. thread pool for sync, coroutine for async)\n\n"
+        "For every symbol or concept: (1) cite with [path:start-end], "
+        "(2) explain purpose, key interface, and relation to other components. "
         "Never state a fact without a citation. "
-        'If retrieved chunks do not support a claim, say "I don\'t have source for this" '
-        "instead of stating it uncited.\n\n"
+        'If source does not support a claim, say "I don\'t have source for this".\n\n'
         f"Retrieved source chunks:\n{chunk_context}"
     )
 
@@ -54,8 +66,18 @@ def answer_node(state: AgentState) -> dict:
     messages: list = [system] + list(state["messages"])
 
     response = None
+    total_input_tokens = 0
+    total_output_tokens = 0
+
+    def _add_usage(r):
+        nonlocal total_input_tokens, total_output_tokens
+        u = r.usage_metadata or {}
+        total_input_tokens += u.get("input_tokens", 0)
+        total_output_tokens += u.get("output_tokens", 0)
+
     for _ in range(MAX_TOOL_ROUNDS):
         response = model.invoke(messages)
+        _add_usage(response)
         if not response.tool_calls:
             break
         messages.append(response)
@@ -63,7 +85,14 @@ def answer_node(state: AgentState) -> dict:
             result = read_file.invoke(tc["args"])
             messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
     else:
-        response = model.invoke(messages)
+        messages.append(HumanMessage(content=(
+            "Tool budget exhausted. Write your final answer NOW using only the "
+            "context already gathered. Do not request any more tools. "
+            "Cite with [path:start-end] for every claim."
+        )))
+        model_no_tools = ChatAnthropic(model=model_name)
+        response = model_no_tools.invoke(messages)
+        _add_usage(response)
 
     content = response.content
     if not isinstance(content, str):
@@ -72,4 +101,8 @@ def answer_node(state: AgentState) -> dict:
             for b in content
         )
     validated = validate_citations(content, _get_db())
-    return {"messages": list(state["messages"]) + [AIMessage(content=validated)]}
+    final = AIMessage(
+        content=validated,
+        usage_metadata={"input_tokens": total_input_tokens, "output_tokens": total_output_tokens},
+    )
+    return {"messages": list(state["messages"]) + [final]}

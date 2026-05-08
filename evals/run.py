@@ -122,6 +122,7 @@ def run(
         ]
     questions = questions[start - 1 : end]
 
+    print(f"agent={AGENT_MODEL}  judge={JUDGE_MODEL}  questions={len(questions)}")
     rows = []
     for q in questions:
         answer = ""
@@ -131,10 +132,14 @@ def run(
                 "messages": [HumanMessage(content=q["question"])],
                 "retrieved_chunks": [],
             })
-            answer = result["messages"][-1].content
-            agent_input_tok = sum(len(str(m.content)) for m in result["messages"][:-1]) // 4
-            agent_output_tok = len(answer) // 4
-            agent_cost = compute_cost(AGENT_MODEL, agent_input_tok, agent_output_tok)
+            last_msg = result["messages"][-1]
+            answer = last_msg.content
+            usage = last_msg.usage_metadata or {}
+            agent_cost = compute_cost(
+                AGENT_MODEL,
+                usage.get("input_tokens", 0),
+                usage.get("output_tokens", 0),
+            )
 
             file_ok = check_file_ok(q["expected_file_paths"], answer)
             judge_pass, judge_in, judge_out = _judge(
@@ -180,5 +185,7 @@ if __name__ == "__main__":
     results_dir = Path(args.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%m%d-%H%M")
-    results_path = str(results_dir / f"results-{timestamp}.md")
+    agent_slug = AGENT_MODEL.split("claude-")[-1].split("-2")[0]
+    judge_slug = JUDGE_MODEL.split("claude-")[-1].split("-2")[0]
+    results_path = str(results_dir / f"results-{timestamp}-{agent_slug}-{judge_slug}.md")
     run(args.questions, results_path, args.start, args.end)
