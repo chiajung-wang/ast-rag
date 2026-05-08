@@ -14,7 +14,7 @@ composition primitive — created when you chain runnables with the `|` operator
 
 1. **Index** — `langchain-core` source is parsed with Python's `ast` module into chunks (one per function, class, and method). Chunks are embedded with OpenAI `text-embedding-3-small` and stored in SQLite with `sqlite-vec`.
 2. **Retrieve** — queries run hybrid BM25 + dense vector search, merged via reciprocal rank fusion into top-5 results.
-3. **Answer** — a 2-node LangGraph agent (Claude Sonnet 4.6) generates answers with `[file:line_start-line_end]` citation markers, validated against the index before returning.
+3. **Answer** — a 2-node LangGraph agent (Claude Haiku 4.5 by default) generates answers with `[file:line_start-line_end]` citation markers, validated against the index before returning.
 4. **UI** — Streamlit chat interface with expandable citation blocks showing source lines and GitHub permalinks.
 
 ## Setup
@@ -52,16 +52,15 @@ make eval
 | 1 | Foundation & Indexer — storage, AST chunker, embedder, clone script, pipeline | ✅ Complete |
 | 2 | Hybrid Retrieval — BM25 + dense RRF | ✅ Complete |
 | 3 | LangGraph Agent — retrieve + answer nodes | ✅ Complete |
-| 4 | Streamlit UI + citations | Planned |
-| 5 | Eval harness | Planned |
+| 4 | Streamlit UI + citations + eval harness | ✅ Complete |
 
 Index: 2414 chunks from `langchain-core` at commit `1519ed5a`.
 
 ## Eval results
 
-_Run `make eval` to generate._
+Baseline: **63 / 67 (94%)** — haiku-4-5 agent, sonnet-4-6 judge, n=1 across 34 questions (7 tiers: recall / behavior / hard / definition / usage / cross-file / negative).
 
-<!-- evals/results.md is generated and not committed. Run make eval locally. -->
+Run `make eval` to regenerate. Results written to `evals/results/results-<timestamp>-<agent>-<judge>.md`.
 
 ## Stack
 
