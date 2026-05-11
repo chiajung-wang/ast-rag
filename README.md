@@ -32,6 +32,32 @@ make run
 
 Requires `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in your environment. Set `AGENT_MODEL` to override the default LLM (default: `claude-haiku-4-5`).
 
+### macOS note
+
+`make index` requires a Python with `enable_load_extension` support for `sqlite-vec`. The Python.org macOS installer disables this by default. If you see:
+
+```
+AttributeError: 'sqlite3.Connection' object has no attribute 'enable_load_extension'
+```
+
+Recreate the venv with Homebrew Python (which has it enabled):
+
+```bash
+brew install python@3.11
+rm -rf .venv
+uv venv --python $(brew --prefix python@3.11)/bin/python3.11
+uv sync
+```
+
+Or use uv's managed Python:
+
+```bash
+rm -rf .venv
+uv python install 3.11
+uv venv --python 3.11
+uv sync
+```
+
 ## CLI usage
 
 ```bash
