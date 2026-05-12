@@ -1,8 +1,15 @@
 from unittest.mock import patch, MagicMock
 import pytest
+import httpx
+import anthropic
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from storage.chunk import make_chunk
 from agent.state import AgentState
+
+
+def _fake_api_error(msg: str = "connection failed") -> anthropic.APIError:
+    req = httpx.Request("GET", "https://api.anthropic.com")
+    return anthropic.APIConnectionError(message=msg, request=req)
 
 
 def _make_chunk(name: str):
@@ -108,4 +115,47 @@ def test_graph_invoke_returns_messages(mock_get_db, mock_anthropic):
 
     assert "messages" in result
     assert len(result["messages"]) >= 2
+    assert isinstance(result["messages"][-1], AIMessage)
+
+
+@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node._get_db")
+def test_answer_node_api_error_returns_graceful_message(mock_get_db, mock_anthropic):
+    mock_get_db.return_value = _mock_db(exists=True)
+    mock_model = MagicMock()
+    mock_model.bind_tools.return_value = mock_model
+    mock_model.invoke.side_effect = _fake_api_error("connection refused")
+    mock_anthropic.return_value = mock_model
+
+    state = AgentState(
+        messages=[HumanMessage("Where is Runnable?")],
+        retrieved_chunks=[],
+    )
+
+    from agent.answer_node import answer_node
+    result = answer_node(state)
+
+    assert len(result["messages"]) == 2
+    last = result["messages"][-1]
+    assert isinstance(last, AIMessage)
+    assert "Anthropic API error" in last.content
+    assert "try again" in last.content
+
+
+@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node._get_db")
+def test_answer_node_empty_chunks_no_crash(mock_get_db, mock_anthropic):
+    mock_get_db.return_value = _mock_db(exists=True)
+    response = AIMessage(content="I don't have source for this.")
+    mock_anthropic.return_value = _mock_model([response])
+
+    state = AgentState(
+        messages=[HumanMessage("What is Runnable?")],
+        retrieved_chunks=[],
+    )
+
+    from agent.answer_node import answer_node
+    result = answer_node(state)
+
+    assert len(result["messages"]) == 2
     assert isinstance(result["messages"][-1], AIMessage)

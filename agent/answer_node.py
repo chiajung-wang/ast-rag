@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import anthropic
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool
@@ -106,27 +107,35 @@ def answer_node(state: AgentState) -> dict:
         total_output_tokens += u.get("output_tokens", 0)
 
     budget_exhausted = False
-    for round_num in range(MAX_TOOL_ROUNDS):
-        response = model.invoke(messages)
-        _add_usage(response)
-        if not response.tool_calls:
-            break
-        messages.append(response)
-        for tc in response.tool_calls:
-            fn = get_class_outline if tc["name"] == "get_class_outline" else read_file
-            result = fn.invoke(tc["args"])
-            tool_trace.append({"round": round_num + 1, "tool": tc["name"], "args": tc["args"]})
-            messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
-    else:
-        budget_exhausted = True
-        messages.append(HumanMessage(content=(
-            "Tool budget exhausted. Write your final answer NOW using only the "
-            "context already gathered. Do not request any more tools. "
-            "Cite with [path:start-end] for every claim."
-        )))
-        model_no_tools = ChatAnthropic(model=model_name, temperature=0)
-        response = model_no_tools.invoke(messages)
-        _add_usage(response)
+    try:
+        for round_num in range(MAX_TOOL_ROUNDS):
+            response = model.invoke(messages)
+            _add_usage(response)
+            if not response.tool_calls:
+                break
+            messages.append(response)
+            for tc in response.tool_calls:
+                fn = get_class_outline if tc["name"] == "get_class_outline" else read_file
+                result = fn.invoke(tc["args"])
+                tool_trace.append({"round": round_num + 1, "tool": tc["name"], "args": tc["args"]})
+                messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
+        else:
+            budget_exhausted = True
+            messages.append(HumanMessage(content=(
+                "Tool budget exhausted. Write your final answer NOW using only the "
+                "context already gathered. Do not request any more tools. "
+                "Cite with [path:start-end] for every claim."
+            )))
+            model_no_tools = ChatAnthropic(model=model_name, temperature=0)
+            response = model_no_tools.invoke(messages)
+            _add_usage(response)
+    except anthropic.APIError as e:
+        return {"messages": list(state["messages"]) + [
+            AIMessage(content=(
+                "Anthropic API error — try again. "
+                f"If it persists, check your API key and rate limits. ({e})"
+            ))
+        ]}
 
     content = response.content
     if not isinstance(content, str):
