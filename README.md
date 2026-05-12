@@ -17,6 +17,46 @@ composition primitive — created when you chain runnables with the `|` operator
 3. **Answer** — a 2-node LangGraph agent (Claude Haiku 4.5 by default) generates answers with `[file:line_start-line_end]` citation markers, validated against the index before returning.
 4. **UI** — Streamlit chat interface with expandable citation blocks showing source lines and GitHub permalinks.
 
+## Technical details
+
+### Chunking
+
+Source is parsed with Python's `ast` module — one chunk per top-level function, top-level class, and method. Methods are stored as **sibling chunks** (not nested inside the class chunk) to avoid oversized blobs that dilute embedding signal.
+
+Method embed text is prefixed with `"ClassName.method_name: "` before indexing so dense retrieval can distinguish `Runnable.invoke` from `BaseTool.invoke` without extra context at query time.
+
+### Hybrid retrieval
+
+Each query runs two searches in parallel:
+
+- **BM25** — tokenizer expands camelCase and snake_case identifiers (`RunnableSequence` → `["runnable", "sequence", "runnablesequence"]`) so symbol names match even when the query uses different casing or word order.
+- **Dense** — OpenAI `text-embedding-3-small` cosine similarity over all 2414 chunk embeddings via `sqlite-vec`.
+
+Both return top-10 candidates. **Reciprocal Rank Fusion** (RRF, k=60) merges the lists by rank position rather than raw score — so the incompatible BM25 and cosine scales don't need normalisation. Top-5 chunks go to the agent.
+
+### Agent
+
+A 2-node LangGraph graph: `retrieve → answer`.
+
+The retrieve node runs a heuristic pre-check: if the query contains a CamelCase or snake_case token that matches a known symbol name, `find_symbol` is called first to guarantee an exact-match chunk is included before `search_corpus` fills remaining slots.
+
+The answer node runs a tool-call loop (max 8 rounds). Each round the LLM may call:
+- `get_class_outline(class_name)` — returns all method signatures and line ranges for a class in one call, so the agent can plan which methods to read before issuing any `read_file` calls.
+- `read_file(path, line_start, line_end)` — returns up to 100 lines of source.
+
+### Citations
+
+The agent is prompted to emit `[path:start-end]` markers for every factual claim. Before returning, each marker is validated against the index via `db.chunk_exists_at`. Invalid markers are stripped and a footnote is appended: `"*N citation(s) could not be verified and were removed.*"`
+
+### Eval
+
+34 hand-crafted questions across 7 tiers (recall, behavior, hard, definition, usage, cross-file, negative). Each answer is scored 0–2:
+
+- **+1** if the expected file path appears in the answer (objective, free)
+- **+1** if an LLM judge (Claude Sonnet 4.6) rates the answer as passing
+
+Negative-tier questions cap at 1 (no file path check — model must correctly say the answer is not in corpus).
+
 ## Setup
 
 ```bash
