@@ -13,6 +13,7 @@ make install   # install deps (uv or pip)
 make run       # launch Streamlit UI
 make index     # (re)build SQLite index from langchain-core source
 make eval      # run 34-question eval, write timestamped results to evals/results/
+make check     # run unit tests (pytest tests/ -v)
 
 python ask.py "Where is Runnable defined?"   # CLI agent test
 python query.py "Runnable definition"        # raw retrieval test
@@ -79,7 +80,7 @@ Current pinned SHA: `1519ed5afbc3bfcc7170b12baa07f1ae7e98edd0` — 181 .py files
 
 **Embed text truncation**: `indexer/embedder.py` truncates embed_text to `MAX_CHARS = 24_000` chars before sending to OpenAI to stay under 8192-token limit.
 
-**Python env**: `.venv` has all deps (`sqlite_vec`, etc). Base anaconda3 env does not. Always use `.venv/Scripts/python -m pytest` for tests.
+**Python env**: `.venv` has all deps (`sqlite_vec`, etc). Base anaconda3 env does not. Always use `.venv/bin/python -m pytest` for tests (macOS/Linux); `.venv/Scripts/python -m pytest` on Windows.
 
 **BM25 score filter**: BM25Okapi IDF = 0 when a token appears in exactly half the corpus — do not filter by `score > 0`. Return top-k unconditionally. See `retrieval/bm25_index.py:search`.
 

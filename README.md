@@ -86,6 +86,7 @@ make eval
 | 2 | Hybrid Retrieval — BM25 + dense RRF | ✅ Complete |
 | 3 | LangGraph Agent — retrieve + answer nodes | ✅ Complete |
 | 4 | Streamlit UI + citations + eval harness | ✅ Complete |
+| 5 | Polish + ship — error handling, make check, eval results | ✅ Complete |
 
 Index: 2414 chunks from `langchain-core` at commit `1519ed5a`.
 
