@@ -58,6 +58,13 @@ uv venv --python 3.11
 uv sync
 ```
 
+## Development
+
+```bash
+make check   # run unit tests
+make eval    # run 34-question eval, write results to evals/results/
+```
+
 ## CLI usage
 
 ```bash
