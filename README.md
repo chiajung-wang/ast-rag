@@ -47,21 +47,22 @@ Both return top-10 candidates. **Reciprocal Rank Fusion** (RRF, k=60) merges the
 | RRF hybrid | 63.6% | 81.8% | 0.439 | 0.468 |
 | **RRF + symbol pre-check** | **97.0%** | **97.0%** | **0.924** | **0.929** |
 
-Two results worth stating plainly, because neither matches what this README claimed before it was measured:
+**31 of those 33 questions name their gold symbol verbatim**, and the pre-check is exact symbol-name lookup. So the set is close to purpose-built for it. The held-out set exists to check that, and it changes the answer:
 
-1. **Hybrid fusion is not the thing that works.** RRF scores *below* dense-only at k=5 (63.6% against 69.7%) and ties it at k=10. BM25 ranks the correct chunk poorly enough that fusing it in costs more than it adds at the top of the list. RRF does improve MRR slightly (0.439 against 0.419), so it orders its hits better while finding fewer.
-2. **The symbol pre-check does the real work.** It lifts recall@5 from 63.6% to 97.0%. It was described as a heuristic detail; it is the single highest-value component in the retriever.
-
-**Read the 97% with its confound.** 31 of the 33 questions contain a gold symbol name verbatim, and the pre-check is exact symbol-name lookup, so the question set is close to purpose-built for it. Split by phrasing:
-
-| configuration | names the symbol | does not name it |
+| configuration | dev recall@5 | held-out recall@5 |
 |---|---|---|
-| BM25 only | 13/31 | 0/2 |
-| Dense only | 22/31 | 1/2 |
-| RRF hybrid | 20/31 | 1/2 |
-| RRF + symbol pre-check | 31/31 | 1/2 |
+| BM25 only | 39.4% | 73.3% |
+| Dense only | 69.7% | 86.7% |
+| RRF hybrid | 63.6% | **93.3%** |
+| RRF + symbol pre-check | **97.0%** | 93.3% |
 
-A set drawn mostly from "Where is X defined?" cannot separate a good retriever from a good string match, and two questions is not a sample. The held-out set in `docs/plans/milestone-6/task-6-4.md` adds questions phrased without the symbol name; until then, treat 97% as an upper bound for symbol-naming queries only.
+Held-out is 15 graded questions, 7 of which name their symbol — a near-even split against the dev set's 31/33. Three conclusions, in order of how much weight they carry:
+
+1. **The dev set's verdict on RRF was an artifact of phrasing.** On dev, RRF looked *worse* than dense alone (63.6% against 69.7%). On held-out it is the best configuration (93.3% against 86.7%). BM25 nearly doubles once questions stop being "Where is X defined?", which is where a lexical index should have been strong all along.
+2. **The pre-check adds no recall on balanced phrasing.** On held-out it scores identically to plain RRF (93.3%), and identically inside both halves of the split: 7/7 naming, 7/8 not naming. What it does add is ranking — MRR 0.880 against 0.813. Its 97% on dev is a symbol-lookup score, not a retrieval score.
+3. **Neither set is large enough to settle the architecture.** At n=15, the 93.3% against 86.7% gap is a single question. Treat the direction as a signal and the magnitude as noise.
+
+The remaining held-out miss for both top configurations is `t11`, which asks what stops the same prompt reaching a model twice — the answer spans `caches.py` and `globals.py` and names neither symbol.
 
 ### Agent
 
@@ -166,15 +167,21 @@ Index: 2414 chunks from `langchain-core` at commit `1519ed5a`.
 
 ## Eval results
 
-Baseline: **63 / 67 (94%)** — haiku-4-5 agent, sonnet-4-6 judge, **n=1**, 34 questions.
+Two question sets:
 
-Read that number with three caveats:
+| set | file | questions | purpose |
+|---|---|---|---|
+| dev | `evals/questions.jsonl` | 50 | Iteration. The system prompt was tuned against the original 34. |
+| held-out | `evals/questions-test.jsonl` | 17 | Written from source *after* the prompt was frozen at `0061b3b`. Never used for tuning. |
 
-1. **n=1, so there is no variance figure.** The runner defaults to n=3 and reports a median and a variance. The published number is a single sample. Run `make eval` to regenerate at n=3.
-2. **The system prompt was tuned against these 34 questions.** The score measures the prompt on the set that shaped it. It does not predict behavior on an unseen question. Task 6.4 adds a held-out set.
-3. **Tier coverage is uneven.** Counts are behavior 11, hard 10, recall 9, and 1 each for definition, usage, cross-file, and negative. Per-tier numbers for those last four rest on a single question.
+Tier counts are now 5 or more per tier on both sets. The original dev set had 1 question each in definition, usage, cross-file, and negative.
 
-Results are written to `evals/results/results-<timestamp>-<agent>-<judge>.md`.
+**End-to-end baseline: 63 / 67 (94%)** — haiku-4-5 agent, sonnet-4-6 judge, **n=1**, on the original 34 dev questions. Two caveats stand:
+
+1. **n=1, so there is no variance figure.** The runner defaults to n=3 and reports a median and a variance. Run `make eval` to regenerate.
+2. **It is a dev score.** The prompt was tuned against those questions, so it does not predict behavior on an unseen one. `make eval-test` produces the held-out score; it has not been run yet, because it spends API budget.
+
+The held-out set *has* been scored on retrieval, which is free — see the ablation above. Results go to `evals/results/results-<timestamp>-<set>-<agent>-<judge>.md`, with the question set named in the filename so a dev score and a held-out score cannot be confused.
 
 ## Stack
 

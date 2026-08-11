@@ -12,7 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make install   # install deps (uv or pip)
 make run       # launch Streamlit UI
 make index     # (re)build SQLite index from langchain-core source
-make eval      # run 34-question eval, write timestamped results to evals/results/
+make eval      # end-to-end eval on the 50-question dev set -> evals/results/
+make eval-test # end-to-end eval on the 17-question held-out set
 make eval-retrieval  # retriever-only ablation: recall@k, MRR, nDCG@5 (no LLM, ~free)
 make check     # run unit tests (pytest tests/ -v)
 
@@ -67,7 +68,9 @@ Entire system runs in one Python process. No services, no Docker, no separate fr
 
 **Chunk context in system prompt**: full chunk `text` injected into system prompt alongside citation rule. User message = raw query only.
 
-**Eval**: 34 hand-crafted questions in `evals/questions.jsonl` across 7 tiers (recall / behavior / hard / definition / usage / cross-file / negative). Hybrid scoring: auto file-path check + LLM-as-judge (Claude Sonnet 4.6). N-run per question (default n=3); reports median score + variance. Results written to `evals/results/results-<mmdd-hhmm>-<agent>-<judge>.md`. Baseline: 63/67 (94%) at n=1.
+**Eval**: two sets. Dev = 50 questions in `evals/questions.jsonl` (prompt was tuned against the original 34). Held-out = 17 in `evals/questions-test.jsonl`, written from source after the prompt froze at `0061b3b`, never used for tuning. Both cover 7 tiers (recall / behavior / hard / definition / usage / cross-file / negative). Hybrid scoring: auto file-path check + LLM-as-judge (Claude Sonnet 4.6). N-run per question (default n=3); reports median score + variance. Results written to `evals/results/results-<mmdd-hhmm>-<agent>-<judge>.md`. Baseline: 63/67 (94%) at n=1 on the original 34 dev questions. Held-out end-to-end score not yet run.
+
+**Held-out reversed two retrieval conclusions.** Dev has 31/33 questions naming their own gold symbol; held-out has 7/15. On held-out, RRF hybrid is the best config (93.3% vs dense 86.7%) and the symbol pre-check adds no recall over plain RRF (93.3% both), only MRR (0.880 vs 0.813). Do not quote the dev 97% as a retrieval number. See README and docs/plans/milestone-6/open-questions.md B1/B1b.
 
 ## Corpus
 

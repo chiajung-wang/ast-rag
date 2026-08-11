@@ -139,9 +139,40 @@ def test_load_questions_skips_meta_and_negative(tmp_path):
 def test_all_shipped_questions_carry_gold_symbols():
     """Regression guard: a new question without labels silently leaves the eval."""
     graded = load_questions("evals/questions.jsonl")
-    assert len(graded) == 33  # 34 total, negative tier excluded
+    assert len(graded) == 45  # 50 total, 5 negative excluded
     for q in graded:
         assert q["expected_symbols"], q["id"]
+
+
+def test_held_out_set_is_graded_and_balanced():
+    """The held-out set exists to break the dev set's phrasing bias.
+
+    Dev has 31 of 33 questions naming their own gold symbol. If the held-out
+    set drifts to the same shape it stops testing anything the dev set does
+    not already test.
+    """
+    graded = load_questions("evals/questions-test.jsonl")
+    assert len(graded) == 15  # 17 total, 2 negative excluded
+    naming = sum(names_own_symbol(q) for q in graded)
+    assert 0.3 <= naming / len(graded) <= 0.7, f"{naming}/{len(graded)} name their symbol"
+
+
+def test_every_tier_has_at_least_five_dev_questions():
+    """Four tiers used to hold exactly 1 question, which is a sample, not a tier."""
+    import collections
+    rows = [json.loads(l) for l in open("evals/questions.jsonl") if l.strip()]
+    counts = collections.Counter(q["tier"] for q in rows if not q.get("_meta"))
+    assert len(counts) == 7
+    for tier, n in counts.items():
+        assert n >= 5, f"tier {tier} has only {n}"
+
+
+def test_dev_and_held_out_question_ids_do_not_overlap():
+    dev = {json.loads(l)["id"] for l in open("evals/questions.jsonl")
+           if l.strip() and not json.loads(l).get("_meta")}
+    test = {json.loads(l)["id"] for l in open("evals/questions-test.jsonl")
+            if l.strip() and not json.loads(l).get("_meta")}
+    assert not (dev & test)
 
 
 # ── run_config / reporting ────────────────────────────────────────────────────

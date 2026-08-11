@@ -255,5 +255,8 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%m%d-%H%M")
     agent_slug = AGENT_MODEL.split("claude-")[-1].split("-2")[0]
     judge_slug = JUDGE_MODEL.split("claude-")[-1].split("-2")[0]
-    results_path = str(results_dir / f"results-{timestamp}-{agent_slug}-{judge_slug}.md")
+    # Name the question set in the filename. A dev score and a held-out score
+    # are different claims and must not be mistaken for each other on disk.
+    set_slug = Path(args.questions).stem.replace("questions-", "").replace("questions", "dev")
+    results_path = str(results_dir / f"results-{timestamp}-{set_slug}-{agent_slug}-{judge_slug}.md")
     run(args.questions, results_path, args.start, args.end, args.runs)

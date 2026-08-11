@@ -36,22 +36,39 @@ Same constraint as A2: the point of the exercise is an independent human opinion
 
 ## B. Blocked on data from tasks 6.3 and 6.4
 
-### B1. Keep or delete the symbol pre-check — ANSWERED by 6.3: keep it
+### B1. Keep or delete the symbol pre-check — REOPENED by 6.4
 
-The ablation is decisive. The pre-check lifts recall@5 from 63.6% to 97.0%, and MRR from 0.439 to 0.924. It is the highest-value component in the retriever, not the implementation detail the README treated it as.
+**Task 6.3 answered "keep it, decisively". Task 6.4 withdrew that answer.** The 6.3 evidence was the dev set, where the pre-check lifts recall@5 from 63.6% to 97.0%. The held-out set says something different:
 
-Two follow-ups it raises instead:
+| configuration | dev recall@5 | held-out recall@5 | held-out MRR |
+|---|---|---|---|
+| RRF hybrid | 63.6% | 93.3% | 0.813 |
+| RRF + symbol pre-check | 97.0% | 93.3% | 0.880 |
 
-1. **RRF is the weak link, not the pre-check.** Hybrid fusion scores below dense-only at k=5 (63.6% against 69.7%). Dropping BM25 and running dense plus the pre-check is now a live option, and it would delete the BM25 index, its 380 ms cold start, and the tokenizer. Test that fifth configuration before deciding.
-2. **The 97% is measured on a favorable set.** 31 of 33 questions name their gold symbol verbatim, and the pre-check is exact name lookup. Re-run the ablation against the task 6.4 held-out questions before quoting the number anywhere.
+On held-out the pre-check adds **no recall at all**, and the split by phrasing is identical for both rows: 7/7 on questions that name the symbol, 7/8 on questions that do not. The dev set has 31 of 33 questions naming their own symbol; the held-out set has 7 of 15. The 97% measured symbol lookup, not retrieval.
 
-### B2. Reranker — ANSWERED by 6.3: keep it out of scope
+What survives: the pre-check improves **ranking**. MRR 0.880 against 0.813 means it puts the right chunk nearer the top of the list it already had. That is worth something to an agent reading 5 chunks in order, but it is a much smaller claim than "the component that carries the retriever".
 
-The recall@5 to recall@10 gap bounds what reranking could recover. With the pre-check in place there is no gap at all: 97.0% at both cutoffs. Every chunk a reranker could promote is already in the top 5.
+Still open, and now the more interesting question: is a ranking gain worth the code? Deciding needs a bigger held-out set. At n=15 a single question moves recall by 6.7 points.
 
-The gap is large without the pre-check (RRF hybrid: 63.6% to 81.8%, so 18 points sit in ranks 6 to 10). That is the measured argument for keeping the pre-check, not for adding a reranker.
+### B1b. RRF versus dense-only — REOPENED by 6.4
 
-Revisit only if B1 follow-up 2 shows the pre-check collapsing on held-out questions.
+Task 6.3 concluded that RRF hurts, because on dev it scored below dense-only (63.6% against 69.7%), and proposed deleting BM25.
+
+Held-out reverses it. RRF is the best configuration there (93.3% against dense 86.7%), and BM25 alone nearly doubles from 39.4% to 73.3%. Lexical search looks weak on a set where every question already contains the exact symbol name, because dense retrieval handles those too. It earns its place once questions are phrased normally.
+
+**Do not delete BM25.** The proposal in 6.3 rested on the biased set.
+
+### B2. Reranker — ANSWERED: keep it out of scope
+
+The recall@5 to recall@10 gap bounds what reranking could recover. It is zero on both sets for the shipped configuration:
+
+| set | RRF + pre-check recall@5 | recall@10 |
+|---|---|---|
+| dev | 97.0% | 97.0% |
+| held-out | 93.3% | 93.3% |
+
+Every chunk a reranker could promote is already in the top 5. This is the one conclusion from 6.3 that held-out did **not** disturb, and it holds for plain RRF on held-out too (93.3% at both cutoffs).
 
 ### B3. Cost of removing the prompt hack — BLOCKED on 6.4 and 6.5
 

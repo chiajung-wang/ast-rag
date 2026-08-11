@@ -110,6 +110,8 @@ Cache the query embeddings on disk. The ablation runs each question through dens
 | RRF hybrid | 63.6% | 81.8% | 0.439 | 0.468 |
 | RRF + symbol pre-check | 97.0% | 97.0% | 0.924 | 0.929 |
 
+> **Superseded by task 6.4.** Both findings below were measured on the dev set, where 31 of 33 questions name their own gold symbol. The held-out set reverses the first and withdraws the second. Kept here as written, because the correction is the point: see the *Held-out correction* section at the end.
+
 Both headline findings contradict what `README.md` claimed before the measurement.
 
 1. **RRF hybrid is worse than dense alone at k=5** (63.6% against 69.7%), and ties it at k=10. BM25 ranks the correct chunk badly enough that fusing it in costs top-of-list accuracy. RRF does raise MRR slightly, so it orders its hits better while finding fewer of them.
@@ -122,3 +124,20 @@ Both headline findings contradict what `README.md` claimed before the measuremen
 **New finding, filed as C7:** `RunnableMap = RunnableParallel` at `runnables/base.py:4151` is a module-level assignment. The chunker skips all 265 of them, so that line is not in the index and q21 had to be graded against `RunnableParallel`.
 
 **New option, filed under B1:** dense + pre-check without BM25 is untested and would delete the BM25 index and its 380 ms cold start.
+
+## Held-out correction (task 6.4)
+
+The held-out set has 7 of 15 graded questions naming their symbol, against the dev set's 31 of 33.
+
+| configuration | dev recall@5 | held-out recall@5 |
+|---|---|---|
+| BM25 only | 39.4% | 73.3% |
+| Dense only | 69.7% | 86.7% |
+| RRF hybrid | 63.6% | **93.3%** |
+| RRF + symbol pre-check | **97.0%** | 93.3% |
+
+1. **"RRF hybrid is worse than dense alone" does not survive.** It was the best configuration on held-out. BM25 nearly doubles once questions stop naming the answer, which is the workload a lexical index is for. The 6.3 proposal to delete BM25 is withdrawn.
+2. **"The symbol pre-check carries the retriever" does not survive either.** On held-out it adds zero recall over plain RRF, and scores identically inside both halves of the phrasing split (7/7 and 7/8). It still improves ranking: MRR 0.880 against 0.813. The 97% measured symbol lookup, not retrieval.
+3. **The reranker conclusion holds.** No recall@5 to recall@10 gap on either set for either top configuration.
+
+The lesson is about the harness, not the retriever: a 33-question set where 94% of questions name their own answer cannot rank retrieval strategies. Both sets remain too small to settle the architecture, since one question moves held-out recall by 6.7 points.
