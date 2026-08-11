@@ -71,7 +71,9 @@ A 2-node LangGraph graph: `retrieve → answer`.
 The retrieve node runs a heuristic pre-check: if the query contains a CamelCase or snake_case token that matches a known symbol name, `find_symbol` is called first to guarantee an exact-match chunk is included before `search_corpus` fills remaining slots.
 
 The answer node runs a tool-call loop (max 8 rounds). Each round the LLM may call:
-- `get_class_outline(class_name)` — returns all method signatures and line ranges for a class in one call, so the agent can plan which methods to read before issuing any `read_file` calls.
+- `get_class_outline(class_name)` — maps a class in one call: methods it defines, methods it inherits (breadth-first over base classes, each tagged with its defining class), base classes outside the corpus, and direct subclasses.
+
+  Inheritance is not a nicety here. `BaseCallbackHandler` defines only 7 `ignore_*` flags — every `on_*` event lives on one of 6 mixins it inherits, and the async variants live on a subclass. The outline used to return 8 rows and no events, and the system prompt made up the difference with a hardcoded rule naming langchain-core classes. It now returns 29 rows including 20 events, the prompt rule is gone, and replaying the recorded eval traces needs 26 outline calls instead of 38.
 - `read_file(path, line_start, line_end)` — returns up to 100 lines of source.
 
 ### Citations
@@ -82,7 +84,7 @@ The agent is prompted to emit `[path:start-end]` markers for every factual claim
 
 ### Eval
 
-34 hand-crafted questions across 7 tiers (recall, behavior, hard, definition, usage, cross-file, negative). Each answer is scored 0–2:
+Two hand-written sets across 7 tiers (recall, behavior, hard, definition, usage, cross-file, negative): 50 dev questions and 17 held-out. Each answer is scored 0–2:
 
 - **+1** if the expected file path appears in the answer (objective, free)
 - **+1** if an LLM judge (Claude Sonnet 4.6) rates the answer as passing

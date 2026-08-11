@@ -1,7 +1,7 @@
 # ast-rag Domain Glossary
 
 ## Chunk
-Unit of indexing and retrieval. One `Chunk` per top-level function, top-level class, or method defined on a class. Methods are sibling chunks — not nested under the class chunk. Each carries: `file_path`, `symbol_name`, `symbol_type` (`"function"` | `"class"` | `"method"`), `parent_class` (for methods, else `None`), `line_start`, `line_end`, `docstring`.
+Unit of indexing and retrieval. One `Chunk` per top-level function, top-level class, or method defined on a class. Methods are sibling chunks — not nested under the class chunk. Each carries: `file_path`, `symbol_name`, `symbol_type` (`"function"` | `"class"` | `"method"`), `parent_class` (for methods, else `None`), `line_start`, `line_end`, `docstring`, `base_classes` (for classes, else empty).
 
 **Embed text**: for methods, text is prefixed `"{parent_class}.{symbol_name}: {raw_source}"` before embedding and BM25 indexing. Raw source stored separately for `read_file` display. Class context injected at index time, not stored in the chunk text field.
 
@@ -50,14 +50,25 @@ Heuristic pre-check: regex extracts CamelCase / `snake_case` / `ALL_CAPS` tokens
 LangGraph `TypedDict` with two fields: `messages: list[BaseMessage]` (LangChain message history) and `retrieved_chunks: list[Chunk]`. `retrieve` node writes chunks once (replace reducer); `answer` node reads them. Explicit field — not inferred from message history — so citation validator and eval runner can inspect chunks directly.
 
 ## Answer Node
-Runs a tool-call loop (`MAX_TOOL_ROUNDS = 8`). Each round: invoke LLM (model from `AGENT_MODEL` env var, default `claude-haiku-4-5`) → if `AIMessage` contains tool calls → execute tools → feed `ToolMessage` back → repeat. Stops when model returns a plain text response or 8 rounds are exhausted. Budget exhausted → forced final answer + `budget_exhausted=True` in `AIMessage.additional_kwargs`. Tools: `get_class_outline(class_name)` (all method signatures + line ranges for a class — agent batches async sibling + all mixins before any reads) and `read_file(path, line_start, line_end)`. Retrieved chunks injected into system prompt alongside citation rule; user message is the raw query. Tool trace `(round, tool_name, args)` accumulated in `additional_kwargs["tool_trace"]`.
+Runs a tool-call loop (`MAX_TOOL_ROUNDS = 8`). Each round: invoke LLM (model from `AGENT_MODEL` env var, default `claude-haiku-4-5`) → if `AIMessage` contains tool calls → execute tools → feed `ToolMessage` back → repeat. Stops when model returns a plain text response or 8 rounds are exhausted. Budget exhausted → forced final answer + `budget_exhausted=True` in `AIMessage.additional_kwargs`. Tools: `get_class_outline(class_name)` (own + inherited method signatures, external bases, direct subclasses — one call maps a class) and `read_file(path, line_start, line_end)`. Retrieved chunks injected into system prompt alongside citation rule; user message is the raw query. Tool trace `(round, tool_name, args)` accumulated in `additional_kwargs["tool_trace"]`.
 
 ## Citation Validator
 Parses `[path:start-end]` markers from answer text. Validates each via `db.chunk_exists_at(path, start, end)`. Strips invalid markers; appends `"*N citation(s) could not be verified and were removed.*"` footnote at end if any were stripped.
 
 ## Eval
-34 hand-crafted questions scored 0/1/2. Hybrid scoring: (1) auto-check any path in `expected_file_paths` appears in answer (objective, free); (2) LLM-as-judge (Claude Sonnet 4.6) rates answer quality against `description_must_include` / `description_must_not_assert` (subjective). N-run per question (default n=3); canonical score = median across runs. Results written to `evals/results/results-<mmdd-hhmm>-<agent>-<judge>.md` with per-question rows (median, variance, file_ok%, judge%, agent_cost, judge_cost) and per-run tool traces. Baseline: 63/67 (94%) haiku-4-5 agent, n=1.
+Two sets: dev (`evals/questions.jsonl`, 50 questions, prompt tuned against the original 34) and held-out (`evals/questions-test.jsonl`, 17 questions written from source after the prompt froze at `0061b3b`). Scored 0/1/2. Hybrid scoring: (1) auto-check any path in `expected_file_paths` appears in answer (objective, free); (2) LLM-as-judge (Claude Sonnet 4.6) rates answer quality against `description_must_include` / `description_must_not_assert` (subjective). N-run per question (default n=3); canonical score = median across runs. Results written to `evals/results/results-<mmdd-hhmm>-<agent>-<judge>.md` with per-question rows (median, variance, file_ok%, judge%, agent_cost, judge_cost) and per-run tool traces. Baseline: 63/67 (94%) haiku-4-5 agent, n=1, original 34 dev questions. Held-out end-to-end score not yet run.
 
 **Score rubric**: 2 = file_ok AND judge pass; 1 = one of the two passes; 0 = neither. Negative-tier questions max = 1 (no file_ok check). Judge failure classes: `pass` / `fail` / `fail/exhausted` (budget hit) / `error`.
 
-**Question schema** (`evals/questions.jsonl`): `id`, `question`, `expected_file_paths` (list — empty `[]` for negative tier), `description_must_include`, `description_must_not_assert`, `tier` (`recall` | `behavior` | `hard` | `definition` | `usage` | `cross-file` | `negative`), `subsystem`. Lines with `_meta` key skipped by runner. Negative tier: judge checks refusal quality (model must say answer is not in corpus).
+**Question schema**: `id`, `question`, `expected_file_paths` (list — empty `[]` for negative tier), `expected_symbols` (gold symbols for the retrieval eval), `description_must_include`, `description_must_not_assert`, `tier` (`recall` | `behavior` | `hard` | `definition` | `usage` | `cross-file` | `negative`), `subsystem`. Lines with `_meta` key skipped by runner. Negative tier: judge checks refusal quality (model must say answer is not in corpus).
+
+## Class Outline
+`db.class_outline(name)` returns a `ClassOutline`: the class chunk, `OutlineEntry` rows for its own and inherited methods, `external_bases` it could not resolve, and `subclasses` defined in the corpus.
+
+**Why inheritance matters here**: `BaseCallbackHandler` defines only 7 `ignore_*` flags. Every `on_*` event lives on one of 6 mixins it inherits, and the async variants live on `AsyncCallbackHandler`, a subclass. Before task 6.5 the outline returned 8 rows and no events, and the system prompt compensated with a hardcoded rule naming langchain-core classes. It now returns 29 rows including 20 events.
+
+**Walk**: breadth-first from the class, capped at `MAX_MRO_DEPTH = 3`, with a visited set that tolerates inheritance cycles. The first definition of a method name wins, so a subclass override hides the base method.
+
+**Scoping**: methods are matched by `parent_class` *and* `file_path`. Matching on name alone merged same-named classes from different modules (`NoLock`, `RunInfo`, `Tee`, `ToolCall`, `ToolCallChunk` each appear twice).
+
+**Base names**: `indexer/chunker.py:_base_names` records simple names only. `mod.Foo` stores `Foo`, `Generic[T]` stores `Generic`. `base_classes` is excluded from the chunk hash, so `insert_chunk` upserts the column and a re-index fills it without invalidating an embedding.

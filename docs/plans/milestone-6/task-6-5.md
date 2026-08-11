@@ -6,13 +6,13 @@ Give `get_class_outline` the inheritance information it lacks, then delete the l
 
 ## Acceptance Criteria
 
-- [ ] Each class chunk records its base class names.
-- [ ] `get_class_outline` returns the methods of the class and the methods of its base classes inside the corpus.
-- [ ] The output marks each method with the class that defines it.
-- [ ] `agent/answer_node.py` no longer names any langchain-core class.
-- [ ] The held-out test score from task 6.4 does not drop after the prompt hack is removed.
-- [ ] `make index` rebuilds the index with the new column.
-- [ ] `make check` passes.
+- [x] Each class chunk records its base class names.
+- [x] `get_class_outline` returns the methods of the class and the methods of its base classes inside the corpus.
+- [x] The output marks each method with the class that defines it.
+- [x] `agent/answer_node.py` no longer names any langchain-core class.
+- [ ] The held-out test score from task 6.4 does not drop after the prompt hack is removed. **Unverified — needs `make eval-test`, which spends API budget (item A1).**
+- [x] `make index` rebuilds the index with the new column.
+- [x] `make check` passes.
 
 ## Problem
 
@@ -100,16 +100,49 @@ Run the held-out test set from task 6.4 before and after the prompt change. If t
 
 ## Steps
 
-- [ ] Add `base_classes` to `Chunk` and to `make_chunk`.
-- [ ] Extract base names in `chunk_file` and add a test with a multi-base class.
-- [ ] Add the `base_classes` column and a schema-version guard to `storage/db.py`.
-- [ ] Rewrite `class_outline` as an MRO walk with a depth cap of 3 and a visited set.
-- [ ] Add a test: a subclass outline includes the base class methods, marked with the defining class.
-- [ ] Add a test: two classes with the same name in different files do not merge.
-- [ ] Add a test: an override hides the base method of the same name.
-- [ ] Update the `get_class_outline` tool docstring.
-- [ ] Delete STEP 1b from the system prompt and rewrite STEP 1.
-- [ ] Run `make index` and confirm the chunk count is unchanged.
-- [ ] Run the held-out test set before and after. Record both scores here.
-- [ ] Update `README.md`, `CLAUDE.md`, and `CONTEXT.md`.
-- [ ] Run `make check` and confirm all tests pass.
+- [x] Add `base_classes` to `Chunk` and to `make_chunk`.
+- [x] Extract base names in `chunk_file` and add a test with a multi-base class.
+- [x] Add the `base_classes` column and a schema-version guard to `storage/db.py`.
+- [x] Rewrite `class_outline` as an MRO walk with a depth cap of 3 and a visited set.
+- [x] Add a test: a subclass outline includes the base class methods, marked with the defining class.
+- [x] Add a test: two classes with the same name in different files do not merge.
+- [x] Add a test: an override hides the base method of the same name.
+- [x] Update the `get_class_outline` tool docstring.
+- [x] Delete STEP 1b from the system prompt and rewrite STEP 1.
+- [x] Run `make index` and confirm the chunk count is unchanged.
+- [ ] Run the held-out test set before and after. **Blocked on A1.** Proxy measured instead: recorded eval traces need 26 outline calls instead of 38.
+- [x] Update `README.md`, `CLAUDE.md`, and `CONTEXT.md`.
+- [x] Run `make check` and confirm all tests pass.
+
+## Result
+
+**The tool was incomplete, and the prompt was papering over it.** `get_class_outline("BaseCallbackHandler")` returned 8 rows — 7 `ignore_*` flags and the class line. Not one event. Every `on_*` event is defined on one of 6 mixins the class inherits, and the async variants live on `AsyncCallbackHandler`, a *subclass*. That is why the prompt carried this:
+
+> Async sibling: for Base* classes drop the 'Base' prefix ... ALWAYS call get_class_outline on the async sibling
+
+It now returns 29 rows including 20 events, plus `AsyncCallbackHandler` under "Direct subclasses in corpus". The prompt rule is deleted; no langchain-core class name appears in `agent/answer_node.py` any more.
+
+### Measured effect on recorded traces
+
+Replaying the `get_class_outline` calls from `results-0512-1445` against the new tool:
+
+| question | primary class | calls before | after |
+|---|---|---|---|
+| q14 | FewShotPromptTemplate | 3 | 1 |
+| q17 | BaseCallbackHandler | 8 | 1 |
+| q20 | CallbackManager | 2 | 1 |
+| q28 | BaseLanguageModel | 2 | 1 |
+| q29 | BaseLoader | 2 | 2 |
+| q33 | ChatPromptTemplate | 4 | 3 |
+
+**38 outline calls to 26, a 32% reduction**, with q17 going from 8 to 1. q29 stays at 2 because `BaseLoader` and `BaseBlobParser` are unrelated classes — two calls is correct there.
+
+This is a tool-round measurement, not an accuracy measurement. Fewer rounds means less latency and less token spend against the same 8-round budget. Whether accuracy holds needs `make eval-test`, which is blocked on A1.
+
+### Also fixed
+
+- **Same-named classes no longer merge.** Methods are matched by `parent_class` *and* `file_path`. `NoLock`, `RunInfo`, `Tee`, `ToolCall` and `ToolCallChunk` each appear twice in this corpus, and their outlines were previously combined.
+- **Re-index is free.** `base_classes` is excluded from the chunk hash, so `insert_chunk` upserts just that column. `make index` filled all 302 class chunks that have bases, made zero embedding calls, and left all 2414 embeddings intact.
+- **Old indexes keep working.** `_init_schema` runs `ALTER TABLE ... ADD COLUMN` when the column is absent, so a `.db` built before this task opens without error and reports empty bases until re-indexed.
+
+Tests: 142 to 158.

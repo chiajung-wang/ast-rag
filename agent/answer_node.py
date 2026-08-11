@@ -24,20 +24,43 @@ def _get_db() -> DB:
 
 @tool
 def get_class_outline(class_name: str) -> str:
-    """Return all method signatures and line ranges for a class.
+    """Return the full method surface of a class in one call.
 
-    Call this before read_file to get a map of which methods exist and where,
-    then use read_file on the specific methods you need.
+    Covers methods the class defines itself and methods it inherits from base
+    classes in the corpus, each tagged with the class that defines it. Also
+    lists base classes outside the corpus and direct subclasses, so async
+    variants and specialisations are visible without a second lookup.
+
+    Call this before read_file to map a class, then read_file the methods you
+    actually need.
     """
-    db = _get_db()
-    chunks = db.class_outline(class_name)
-    if not chunks:
+    outline = _get_db().class_outline(class_name)
+    if not outline:
         return f"No class '{class_name}' found in corpus."
-    lines = []
-    for c in chunks:
-        sig = c.text.splitlines()[0] if c.text else ""
+
+    cls = outline.class_chunk
+    lines = [f"[{cls.file_path}:{cls.line_start}-{cls.line_end}] class {cls.symbol_name}"]
+
+    for entry in outline.entries:
+        c = entry.chunk
+        sig = c.text.splitlines()[0].strip() if c.text else ""
         doc = f"  # {c.docstring.splitlines()[0][:80]}" if c.docstring else ""
-        lines.append(f"[{c.file_path}:{c.line_start}-{c.line_end}] {sig}{doc}")
+        origin = f" (inherited from {entry.defining_class})" if entry.inherited else ""
+        lines.append(f"[{c.file_path}:{c.line_start}-{c.line_end}]{origin} {sig}{doc}")
+
+    if not outline.entries:
+        lines.append("(no methods defined on this class or its corpus base classes)")
+    if outline.external_bases:
+        lines.append(
+            "Base classes outside the corpus (not expanded): "
+            + ", ".join(outline.external_bases)
+        )
+    if outline.subclasses:
+        subs = ", ".join(
+            f"{s.symbol_name} [{s.file_path}:{s.line_start}-{s.line_end}]"
+            for s in outline.subclasses
+        )
+        lines.append(f"Direct subclasses in corpus: {subs}")
     return "\n".join(lines)
 
 
@@ -57,17 +80,14 @@ def _build_system_prompt(chunks) -> str:
         chunk_context = "(no chunks retrieved)"
     return (
         "You are a code assistant for the langchain-core codebase.\n\n"
-        "STEP 1 — Call get_class_outline on the relevant class first. This returns ALL "
-        "method signatures and line ranges in one shot — use it to map the class before "
-        "reading anything. For standalone functions, call read_file directly.\n\n"
-        "STEP 1b — Before reading ANY source lines, batch ALL related get_class_outline calls "
-        "in the SAME round as you process the first outline result:\n"
-        "  • Async sibling: for Base* classes drop the 'Base' prefix to get the async name "
-        "(e.g. BaseCallbackHandler → AsyncCallbackHandler, BaseRunManager → AsyncRunManager). "
-        "ALWAYS call get_class_outline on the async sibling — it holds async def versions of "
-        "all sync events and MUST be included when the question asks about events or methods.\n"
-        "  • All mixin/parent classes listed in the class definition\n"
-        "Call all of these BEFORE calling read_file on anything. One batch, one round.\n\n"
+        "STEP 1 — Call get_class_outline on the relevant class first. It returns the "
+        "methods the class defines and the methods it inherits from base classes in the "
+        "corpus, each tagged with its defining class, plus any direct subclasses. One "
+        "call maps the class. For standalone functions, call read_file directly.\n\n"
+        "STEP 1b — The outline lists direct subclasses and unexpanded external base "
+        "classes. If the question concerns a variant held by a subclass, or a base class "
+        "the outline could not expand, call get_class_outline on that name too. Batch "
+        "those calls in one round before any read_file.\n\n"
         "STEP 1c — After reviewing outlines: call read_file on every method relevant to "
         "the question. For questions about 'what methods must subclasses implement' or "
         "'what does this class expose', read EVERY method in the outline that is either: "

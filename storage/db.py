@@ -1,9 +1,31 @@
 from __future__ import annotations
+import json
 import sqlite3
 import struct
+from dataclasses import dataclass, field
 from storage.chunk import Chunk, make_chunk
 
 EMBEDDING_DIM = 1536
+MAX_MRO_DEPTH = 3
+
+
+@dataclass
+class OutlineEntry:
+    """One method in a class outline, tagged with the class that defines it."""
+    chunk: Chunk
+    defining_class: str
+    inherited: bool
+
+
+@dataclass
+class ClassOutline:
+    class_chunk: Chunk | None
+    entries: list[OutlineEntry] = field(default_factory=list)
+    external_bases: list[str] = field(default_factory=list)   # bases outside the corpus
+    subclasses: list[Chunk] = field(default_factory=list)     # direct subclasses in corpus
+
+    def __bool__(self) -> bool:
+        return self.class_chunk is not None
 
 
 def _serialize(v: list[float]) -> bytes:
@@ -32,7 +54,8 @@ class DB:
                 line_end    INTEGER NOT NULL,
                 docstring   TEXT,
                 text        TEXT NOT NULL,
-                embed_text  TEXT NOT NULL
+                embed_text  TEXT NOT NULL,
+                base_classes TEXT NOT NULL DEFAULT '[]'
             );
             CREATE INDEX IF NOT EXISTS idx_symbol
                 ON chunks(lower(symbol_name));
@@ -40,29 +63,44 @@ class DB:
                 embedding FLOAT[{EMBEDDING_DIM}]
             );
         """)
+        # CREATE TABLE IF NOT EXISTS will not add a column to an index built
+        # before base_classes existed. Migrate in place so an old .db keeps
+        # working; the column stays empty until the next `make index`.
+        existing = {row[1] for row in self.conn.execute("PRAGMA table_info(chunks)")}
+        if "base_classes" not in existing:
+            self.conn.execute(
+                "ALTER TABLE chunks ADD COLUMN base_classes TEXT NOT NULL DEFAULT '[]'"
+            )
         self.conn.commit()
 
     def insert_chunk(self, chunk: Chunk) -> int:
-        cur = self.conn.execute(
+        """Insert a chunk, or refresh base_classes on one already stored.
+
+        The chunk id excludes base_classes, so re-indexing an existing corpus
+        fills the column in place without invalidating a single embedding.
+        """
+        self.conn.execute(
             """
-            INSERT OR IGNORE INTO chunks
+            INSERT INTO chunks
                 (id, file_path, symbol_name, symbol_type, parent_class,
-                 line_start, line_end, docstring, text, embed_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 line_start, line_end, docstring, text, embed_text, base_classes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET base_classes = excluded.base_classes
             """,
             (
                 chunk.id, chunk.file_path, chunk.symbol_name, chunk.symbol_type,
                 chunk.parent_class, chunk.line_start, chunk.line_end,
                 chunk.docstring, chunk.text, chunk.embed_text,
+                json.dumps(chunk.base_classes),
             ),
         )
         self.conn.commit()
-        if cur.rowcount == 0:
-            row = self.conn.execute(
-                "SELECT rowid FROM chunks WHERE id = ?", (chunk.id,)
-            ).fetchone()
-            return row["rowid"]
-        return cur.lastrowid
+        # Unconditional lookup: an upsert that took the UPDATE branch does not
+        # give a reliable lastrowid.
+        row = self.conn.execute(
+            "SELECT rowid FROM chunks WHERE id = ?", (chunk.id,)
+        ).fetchone()
+        return row["rowid"]
 
     def has_embedding(self, rowid: int) -> bool:
         return self.conn.execute(
@@ -80,7 +118,7 @@ class DB:
         rows = self.conn.execute(
             """
             SELECT c.id, c.file_path, c.symbol_name, c.symbol_type, c.parent_class,
-                   c.line_start, c.line_end, c.docstring, c.text, c.embed_text
+                   c.line_start, c.line_end, c.docstring, c.text, c.embed_text, c.base_classes
             FROM vec_chunks v
             JOIN chunks c ON c.rowid = v.rowid
             WHERE v.embedding MATCH ?
@@ -95,7 +133,7 @@ class DB:
         row = self.conn.execute(
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
-                   line_start, line_end, docstring, text, embed_text
+                   line_start, line_end, docstring, text, embed_text, base_classes
             FROM chunks WHERE lower(symbol_name) = lower(?)
             ORDER BY
                 CASE symbol_type WHEN 'class' THEN 0 WHEN 'method' THEN 1 ELSE 2 END,
@@ -120,7 +158,7 @@ class DB:
         rows = self.conn.execute(
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
-                   line_start, line_end, docstring, text, embed_text
+                   line_start, line_end, docstring, text, embed_text, base_classes
             FROM chunks
             """
         ).fetchall()
@@ -130,19 +168,103 @@ class DB:
         rows = self.conn.execute("SELECT symbol_name FROM chunks").fetchall()
         return {r["symbol_name"] for r in rows}
 
-    def class_outline(self, class_name: str) -> list[Chunk]:
+    def _find_class(self, class_name: str) -> Chunk | None:
+        """Resolve a class by name. Ties break on file_path, then line_start."""
+        row = self.conn.execute(
+            """
+            SELECT id, file_path, symbol_name, symbol_type, parent_class,
+                   line_start, line_end, docstring, text, embed_text, base_classes
+            FROM chunks
+            WHERE lower(symbol_name) = lower(?) AND symbol_type = 'class'
+            ORDER BY file_path, line_start
+            LIMIT 1
+            """,
+            (class_name,),
+        ).fetchone()
+        return _row_to_chunk(row) if row else None
+
+    def _methods_of(self, class_name: str, file_path: str) -> list[Chunk]:
+        """Methods of one class. Scoped to its file so same-named classes
+        in different modules do not merge (NoLock, RunInfo, Tee, ToolCall,
+        ToolCallChunk each appear twice in this corpus)."""
         rows = self.conn.execute(
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
-                   line_start, line_end, docstring, text, embed_text
+                   line_start, line_end, docstring, text, embed_text, base_classes
             FROM chunks
-            WHERE (lower(symbol_name) = lower(?) AND symbol_type = 'class')
-               OR lower(parent_class) = lower(?)
+            WHERE lower(parent_class) = lower(?) AND file_path = ?
             ORDER BY line_start
             """,
-            (class_name, class_name),
+            (class_name, file_path),
         ).fetchall()
         return [_row_to_chunk(r) for r in rows]
+
+    def _subclasses_of(self, class_name: str) -> list[Chunk]:
+        """Direct subclasses inside the corpus. 331 class chunks, so a scan
+        is cheaper than teaching SQLite to read the JSON column."""
+        rows = self.conn.execute(
+            """
+            SELECT id, file_path, symbol_name, symbol_type, parent_class,
+                   line_start, line_end, docstring, text, embed_text, base_classes
+            FROM chunks WHERE symbol_type = 'class'
+            """
+        ).fetchall()
+        target = class_name.lower()
+        return sorted(
+            (c for c in map(_row_to_chunk, rows)
+             if any(b.lower() == target for b in c.base_classes)),
+            key=lambda c: (c.file_path, c.line_start),
+        )
+
+    def class_outline(self, class_name: str, max_depth: int = MAX_MRO_DEPTH) -> ClassOutline:
+        """Methods of a class and of its base classes, walked breadth-first.
+
+        Breadth-first matters: the first definition of a method name wins, so
+        a subclass override hides the base method rather than the reverse.
+
+        Bases outside the corpus (BaseModel, ABC, Generic) cannot resolve and
+        are reported separately, so a caller knows the outline is partial.
+        """
+        root = self._find_class(class_name)
+        if root is None:
+            return ClassOutline(class_chunk=None)
+
+        entries: list[OutlineEntry] = []
+        external: list[str] = []
+        seen_methods: set[str] = set()
+        visited: set[str] = {root.symbol_name.lower()}
+        queue: list[tuple[Chunk, int]] = [(root, 0)]
+
+        while queue:
+            cls, depth = queue.pop(0)
+            for method in self._methods_of(cls.symbol_name, cls.file_path):
+                key = method.symbol_name.lower()
+                if key in seen_methods:
+                    continue  # already defined nearer the subclass
+                seen_methods.add(key)
+                entries.append(OutlineEntry(
+                    chunk=method,
+                    defining_class=cls.symbol_name,
+                    inherited=cls.id != root.id,
+                ))
+            if depth >= max_depth:
+                continue
+            for base in cls.base_classes:
+                if base.lower() in visited:
+                    continue
+                visited.add(base.lower())
+                resolved = self._find_class(base)
+                if resolved is not None:
+                    queue.append((resolved, depth + 1))
+                else:
+                    external.append(base)
+
+        return ClassOutline(
+            class_chunk=root,
+            entries=entries,
+            external_bases=external,
+            subclasses=self._subclasses_of(root.symbol_name),
+        )
 
 
 def _row_to_chunk(row: sqlite3.Row) -> Chunk:
@@ -157,4 +279,14 @@ def _row_to_chunk(row: sqlite3.Row) -> Chunk:
         docstring=row["docstring"],
         text=row["text"],
         embed_text=row["embed_text"],
+        base_classes=_load_bases(row),
     )
+
+
+def _load_bases(row: sqlite3.Row) -> list[str]:
+    """Old rows predate the column, and ALTER TABLE leaves them at '[]'."""
+    try:
+        raw = row["base_classes"]
+    except (IndexError, KeyError):
+        return []
+    return json.loads(raw) if raw else []

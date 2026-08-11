@@ -112,3 +112,41 @@ def test_chunk_corpus_recurses():
     names = {c.symbol_name for c in chunks}
     assert "fn_a" in names
     assert "fn_b" in names
+
+
+# ── base class extraction (task 6.5) ─────────────────────────────────────────
+
+def _chunk_source(tmp_path, source: str):
+    f = tmp_path / "mod.py"
+    f.write_text(source)
+    return chunk_file(f, tmp_path)
+
+
+def test_base_classes_simple_name(tmp_path):
+    chunks = _chunk_source(tmp_path, "class Child(Parent):\n    pass\n")
+    assert chunks[0].base_classes == ["Parent"]
+
+
+def test_base_classes_multiple_bases(tmp_path):
+    chunks = _chunk_source(tmp_path, "class H(MixinA, MixinB, MixinC):\n    pass\n")
+    assert chunks[0].base_classes == ["MixinA", "MixinB", "MixinC"]
+
+
+def test_base_classes_dotted_name_keeps_attribute(tmp_path):
+    chunks = _chunk_source(tmp_path, "class C(abc.ABC):\n    pass\n")
+    assert chunks[0].base_classes == ["ABC"]
+
+
+def test_base_classes_subscripted_generic(tmp_path):
+    chunks = _chunk_source(tmp_path, "class S(Generic[T]):\n    pass\n")
+    assert chunks[0].base_classes == ["Generic"]
+
+
+def test_base_classes_empty_for_plain_class(tmp_path):
+    chunks = _chunk_source(tmp_path, "class Plain:\n    pass\n")
+    assert chunks[0].base_classes == []
+
+
+def test_base_classes_empty_for_function(tmp_path):
+    chunks = _chunk_source(tmp_path, "def f():\n    pass\n")
+    assert chunks[0].base_classes == []

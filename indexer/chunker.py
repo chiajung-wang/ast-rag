@@ -20,6 +20,24 @@ def _extract_source(lines: list[str], node: ast.AST) -> str:
     return "\n".join(lines[node.lineno - 1 : node.end_lineno])
 
 
+def _base_names(node: ast.ClassDef) -> list[str]:
+    """Simple names of a class's bases.
+
+    `Foo` yields "Foo", `mod.Foo` yields "Foo", and `Generic[T]` yields
+    "Generic". Anything else (a call, a comprehension) is skipped. Names are
+    resolved against the corpus later, so an unresolvable base is harmless.
+    """
+    names: list[str] = []
+    for base in node.bases:
+        if isinstance(base, ast.Subscript):
+            base = base.value
+        if isinstance(base, ast.Name):
+            names.append(base.id)
+        elif isinstance(base, ast.Attribute):
+            names.append(base.attr)
+    return names
+
+
 def chunk_file(file_path: Path, corpus_root: Path) -> list[Chunk]:
     try:
         source = file_path.read_text(encoding="utf-8", errors="ignore")
@@ -56,6 +74,7 @@ def chunk_file(file_path: Path, corpus_root: Path) -> list[Chunk]:
                     line_end=node.end_lineno,
                     docstring=_get_docstring(node),
                     text=_extract_source(lines, node),
+                    base_classes=_base_names(node),
                 )
             )
             for item in node.body:
