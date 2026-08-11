@@ -13,6 +13,7 @@ make install   # install deps (uv or pip)
 make run       # launch Streamlit UI
 make index     # (re)build SQLite index from langchain-core source
 make eval      # run 34-question eval, write timestamped results to evals/results/
+make eval-retrieval  # retriever-only ablation: recall@k, MRR, nDCG@5 (no LLM, ~free)
 make check     # run unit tests (pytest tests/ -v)
 
 python ask.py "Where is Runnable defined?"   # CLI agent test
@@ -50,7 +51,7 @@ Entire system runs in one Python process. No services, no Docker, no separate fr
 
 **Chunk granularity**: one chunk per top-level function, top-level class, and method. Methods are sibling chunks (not nested). Method embed text prefixed with `"ClassName.method_name: "` for BM25 and dense retrieval.
 
-**Hybrid Retrieval**: BM25 top-10 + dense top-10 → reciprocal rank fusion → top-5. BM25 tokenizer expands camelCase + snake_case (`RunnableSequence` → `["runnable", "sequence", "runnablesequence"]`, `invoke_async` → `["invoke", "async", "invoke_async"]`). Implemented in `retrieval/bm25_index.py`, `retrieval/rrf.py`, `retrieval/pipeline.py`.
+**Hybrid Retrieval**: BM25 top-10 + dense top-10 → reciprocal rank fusion → top-5. Measured (`make eval-retrieval`, 33 questions): BM25 39.4% recall@5, dense 69.7%, RRF 63.6%, RRF+symbol pre-check 97.0%. RRF scores *below* dense alone at k=5 — the symbol pre-check is what carries the retriever, not the fusion. See README for the confound. BM25 tokenizer expands camelCase + snake_case (`RunnableSequence` → `["runnable", "sequence", "runnablesequence"]`, `invoke_async` → `["invoke", "async", "invoke_async"]`). Implemented in `retrieval/bm25_index.py`, `retrieval/rrf.py`, `retrieval/pipeline.py`.
 
 **Retrieve node logic**: heuristic pre-check extracts CamelCase/snake_case tokens from query, checks symbol name set. Match → `find_symbol` first, then `search_corpus` for remaining slots. No match → `search_corpus` only.
 

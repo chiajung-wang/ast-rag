@@ -36,6 +36,33 @@ The two run in sequence. Overlapping them on a thread would hide under 1% of the
 
 Both return top-10 candidates. **Reciprocal Rank Fusion** (RRF, k=60) merges the lists by rank position rather than raw score — so the incompatible BM25 and cosine scales don't need normalisation. Top-5 chunks go to the agent.
 
+### What the ablation says about that design
+
+`make eval-retrieval` grades the retriever alone against hand-labeled gold symbols, with no LLM in the loop. 33 questions, binary relevance, a hit requires the right symbol in the right file.
+
+| configuration | recall@5 | recall@10 | MRR | nDCG@5 |
+|---|---|---|---|---|
+| BM25 only | 39.4% | 54.5% | 0.293 | 0.300 |
+| Dense only | 69.7% | 81.8% | 0.419 | 0.472 |
+| RRF hybrid | 63.6% | 81.8% | 0.439 | 0.468 |
+| **RRF + symbol pre-check** | **97.0%** | **97.0%** | **0.924** | **0.929** |
+
+Two results worth stating plainly, because neither matches what this README claimed before it was measured:
+
+1. **Hybrid fusion is not the thing that works.** RRF scores *below* dense-only at k=5 (63.6% against 69.7%) and ties it at k=10. BM25 ranks the correct chunk poorly enough that fusing it in costs more than it adds at the top of the list. RRF does improve MRR slightly (0.439 against 0.419), so it orders its hits better while finding fewer.
+2. **The symbol pre-check does the real work.** It lifts recall@5 from 63.6% to 97.0%. It was described as a heuristic detail; it is the single highest-value component in the retriever.
+
+**Read the 97% with its confound.** 31 of the 33 questions contain a gold symbol name verbatim, and the pre-check is exact symbol-name lookup, so the question set is close to purpose-built for it. Split by phrasing:
+
+| configuration | names the symbol | does not name it |
+|---|---|---|
+| BM25 only | 13/31 | 0/2 |
+| Dense only | 22/31 | 1/2 |
+| RRF hybrid | 20/31 | 1/2 |
+| RRF + symbol pre-check | 31/31 | 1/2 |
+
+A set drawn mostly from "Where is X defined?" cannot separate a good retriever from a good string match, and two questions is not a sample. The held-out set in `docs/plans/milestone-6/task-6-4.md` adds questions phrased without the symbol name; until then, treat 97% as an upper bound for symbol-naming queries only.
+
 ### Agent
 
 A 2-node LangGraph graph: `retrieve → answer`.
@@ -105,9 +132,12 @@ uv sync
 ## Development
 
 ```bash
-make check   # run unit tests
-make eval    # run 34-question eval, write results to evals/results/
+make check            # run unit tests
+make eval             # 34-question end-to-end eval (LLM agent + LLM judge)
+make eval-retrieval   # retriever-only ablation: recall@k, MRR, nDCG@5 (no LLM)
 ```
+
+`make eval-retrieval` needs no Anthropic key and caches its query embeddings, so it runs in seconds and costs nothing after the first pass. Use it to check a retrieval change before spending a full eval.
 
 ## CLI usage
 

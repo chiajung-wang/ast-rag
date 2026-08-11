@@ -45,3 +45,6 @@ package-lock.json
 node_modules
 package.json
 uv.lock
+
+# Retrieval eval embedding cache (regenerated, costs ~nothing)
+evals/.embedding_cache.json

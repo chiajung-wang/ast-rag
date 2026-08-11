@@ -36,21 +36,22 @@ Same constraint as A2: the point of the exercise is an independent human opinion
 
 ## B. Blocked on data from tasks 6.3 and 6.4
 
-### B1. Keep or delete the symbol pre-check — BLOCKED on 6.3
+### B1. Keep or delete the symbol pre-check — ANSWERED by 6.3: keep it
 
-The retrieve node runs a heuristic pre-check, then forces the matched chunk ahead of the RRF results. Task 6.1 fixed two defects in that path: nondeterministic candidate order, and an arbitrary row from `find_symbol`.
+The ablation is decisive. The pre-check lifts recall@5 from 63.6% to 97.0%, and MRR from 0.439 to 0.924. It is the highest-value component in the retriever, not the implementation detail the README treated it as.
 
-The ablation in task 6.3 includes the pre-check as its fourth row. If that row does not beat plain RRF, the pre-check adds complexity and buys nothing.
+Two follow-ups it raises instead:
 
-Decision after 6.3: keep it, or delete it and simplify `retrieve()` to `search_corpus()`.
+1. **RRF is the weak link, not the pre-check.** Hybrid fusion scores below dense-only at k=5 (63.6% against 69.7%). Dropping BM25 and running dense plus the pre-check is now a live option, and it would delete the BM25 index, its 380 ms cold start, and the tokenizer. Test that fifth configuration before deciding.
+2. **The 97% is measured on a favorable set.** 31 of 33 questions name their gold symbol verbatim, and the pre-check is exact name lookup. Re-run the ablation against the task 6.4 held-out questions before quoting the number anywhere.
 
-### B2. Reranker — BLOCKED on 6.3
+### B2. Reranker — ANSWERED by 6.3: keep it out of scope
 
-`CLAUDE.md` puts a reranker out of scope. That was a scoping decision, not a measured one.
+The recall@5 to recall@10 gap bounds what reranking could recover. With the pre-check in place there is no gap at all: 97.0% at both cutoffs. Every chunk a reranker could promote is already in the top 5.
 
-Task 6.3 reports recall@5 and recall@10. The gap between them bounds what a reranker could win. A small gap closes the question permanently, and the README can say so with a number. A large gap makes the exclusion a real cost.
+The gap is large without the pre-check (RRF hybrid: 63.6% to 81.8%, so 18 points sit in ranks 6 to 10). That is the measured argument for keeping the pre-check, not for adding a reranker.
 
-Decision after 6.3: keep the boundary and justify it with the measured gap, or reopen it.
+Revisit only if B1 follow-up 2 shows the pre-check collapsing on held-out questions.
 
 ### B3. Cost of removing the prompt hack — BLOCKED on 6.4 and 6.5
 
@@ -124,6 +125,22 @@ Options: return the top few candidates and let the answer node choose. Or expose
 Task 6.2 documented the guarantee honestly. Task 6.7 adds a citation-precision metric that measures the stronger property.
 
 Decision after 6.7: whether the metric justifies a stricter check. A stricter check would raise the strip rate, and stripping a correct citation is worse for a reader than keeping a loose one.
+
+### C7. Module-level assignments are never indexed — PARKED
+
+Found while labeling gold symbols for task 6.3. `indexer/chunker.py` visits only `FunctionDef`, `AsyncFunctionDef`, and `ClassDef` at module level. Every `Assign` and `AnnAssign` is skipped, and there are **265 of them across the 181 files**.
+
+Question q21 asks what `RunnableMap` resolves to. The answer is one line, `runnables/base.py:4151`:
+
+```python
+RunnableMap = RunnableParallel
+```
+
+That line is not in the index and cannot be retrieved. The agent can still reach it with `read_file`, so the end-to-end eval passes the question, and the retrieval eval had to be graded against `RunnableParallel` instead.
+
+Aliases, module-level constants, `__all__`, and type aliases are all invisible to retrieval for the same reason.
+
+Options: chunk module-level assignments whose target is a Name, or add one synthetic module chunk per file holding the assignments and the imports. Both raise the chunk count, so measure with task 6.3 metrics before and after.
 
 ### C5. `docstring` is stored and never used for retrieval — PARKED
 

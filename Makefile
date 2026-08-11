@@ -1,4 +1,4 @@
-.PHONY: install run index eval check
+.PHONY: install run index eval eval-retrieval check
 
 install:
 	uv sync || pip install -e ".[dev]"
@@ -11,6 +11,9 @@ run:
 
 eval:
 	python evals/run.py
+
+eval-retrieval:
+	python -m evals.retrieval_eval
 
 check:
 	python -m pytest tests/ -v
