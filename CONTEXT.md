@@ -15,10 +15,16 @@ The `langchain-core` package source, cloned at a pinned commit SHA. Fixed and re
 The SQLite `.db` file containing: chunk metadata table, sqlite-vec embeddings table, BM25 text corpus (in-memory at runtime). Single artifact produced by the Indexer.
 
 ## Citation Marker
-`[runnables/base.py:120-180]` format — short path (corpus root stripped) + line range. Embedded in agent answer text. Validated against Index before return; invalid markers stripped with footnote. One `CORPUS_ROOT` constant handles prefix stripping at validation time.
+`[runnables/base.py:120-180]` format — short path (corpus root stripped) + line range. Embedded in agent answer text. Checked against Index before return. Markers that fail are stripped with a footnote.
+
+**Path normalization**: `normalize_path` in `agent/citations.py` strips any leading corpus-root segment before the lookup, so `langchain_core/runnables/base.py` and `libs/core/langchain_core/runnables/base.py` both resolve. A marker that survives is rewritten to the canonical short path, so every consumer downstream sees one form. Prefixes derive from `CLONE_DIR` and `CORPUS_SUBPATH`.
+
+**What the check proves**: the cited range falls inside an indexed symbol in that file. `chunk_exists_at` tests containment (`line_start <= ? AND line_end >= ?`). It does not prove the lines support the claim.
 
 ## Citation Expander
-Streamlit `st.expander` for each citation. Shows: (1) raw source lines in monospace code block; (2) GitHub permalink `https://github.com/langchain-ai/langchain/blob/{COMMIT_SHA}/libs/core/{path}#L{start}-L{end}` using pinned commit SHA. SHA stored in `indexer/corpus_config.py`.
+Streamlit `st.expander` for each citation. Shows: (1) raw source lines in monospace code block; (2) GitHub permalink `{REPO_URL}/blob/{COMMIT_SHA}/{CORPUS_SUBPATH}/{path}#L{start}-L{end}`.
+
+The prefix comes from `CORPUS_SUBPATH`, never a literal. `file_path` is relative to `CLONE_DIR/CORPUS_SUBPATH`, so a hardcoded `libs/core/` drops the `langchain_core/` segment and every link returns 404.
 
 ## Symbol Lookup
 `find_symbol(name)` matches case-insensitively on `symbol_name`. Returns one match or `None`. Not fuzzy, not prefix — exact modulo case.

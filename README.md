@@ -27,10 +27,12 @@ Method embed text is prefixed with `"ClassName.method_name: "` before indexing s
 
 ### Hybrid retrieval
 
-Each query runs two searches in parallel:
+Each query runs two searches:
 
-- **BM25** — tokenizer expands camelCase and snake_case identifiers (`RunnableSequence` → `["runnable", "sequence", "runnablesequence"]`) so symbol names match even when the query uses different casing or word order.
-- **Dense** — OpenAI `text-embedding-3-small` cosine similarity over all 2414 chunk embeddings via `sqlite-vec`.
+- **BM25** — tokenizer expands camelCase and snake_case identifiers (`RunnableSequence` → `["runnable", "sequence", "runnablesequence"]`) so symbol names match even when the query uses different casing or word order. Costs ~1 ms per query over the in-memory index.
+- **Dense** — OpenAI `text-embedding-3-small` cosine similarity over all 2414 chunk embeddings via `sqlite-vec`. The embedding request dominates query latency at ~300 ms.
+
+The two run in sequence. Overlapping them on a thread would hide under 1% of the wall clock, so it is not worth the machinery.
 
 Both return top-10 candidates. **Reciprocal Rank Fusion** (RRF, k=60) merges the lists by rank position rather than raw score — so the incompatible BM25 and cosine scales don't need normalisation. Top-5 chunks go to the agent.
 
@@ -46,7 +48,9 @@ The answer node runs a tool-call loop (max 8 rounds). Each round the LLM may cal
 
 ### Citations
 
-The agent is prompted to emit `[path:start-end]` markers for every factual claim. Before returning, each marker is validated against the index via `db.chunk_exists_at`. Invalid markers are stripped and a footnote is appended: `"*N citation(s) could not be verified and were removed.*"`
+The agent is prompted to emit `[path:start-end]` markers for every factual claim. Before returning, each marker is checked against the index via `db.chunk_exists_at`. Markers that fail are stripped and a footnote is appended: `"*N citation(s) could not be verified and were removed.*"` Markers written against a longer path (`langchain_core/runnables/base.py`) are rewritten to the canonical short path rather than discarded.
+
+**What the check proves:** the cited line range falls inside an indexed symbol in that file. **What it does not prove:** that those lines support the claim. It catches an invented file and an invented line range. It does not catch a real range cited for the wrong reason. Task 6.7 in `docs/plans/milestone-6/` adds the metric that measures the stronger property.
 
 ### Eval
 
@@ -132,9 +136,15 @@ Index: 2414 chunks from `langchain-core` at commit `1519ed5a`.
 
 ## Eval results
 
-Baseline: **63 / 67 (94%)** — haiku-4-5 agent, sonnet-4-6 judge, n=1 across 34 questions (7 tiers: recall / behavior / hard / definition / usage / cross-file / negative).
+Baseline: **63 / 67 (94%)** — haiku-4-5 agent, sonnet-4-6 judge, **n=1**, 34 questions.
 
-Run `make eval` to regenerate. Results written to `evals/results/results-<timestamp>-<agent>-<judge>.md`.
+Read that number with three caveats:
+
+1. **n=1, so there is no variance figure.** The runner defaults to n=3 and reports a median and a variance. The published number is a single sample. Run `make eval` to regenerate at n=3.
+2. **The system prompt was tuned against these 34 questions.** The score measures the prompt on the set that shaped it. It does not predict behavior on an unseen question. Task 6.4 adds a held-out set.
+3. **Tier coverage is uneven.** Counts are behavior 11, hard 10, recall 9, and 1 each for definition, usage, cross-file, and negative. Per-tier numbers for those last four rest on a single question.
+
+Results are written to `evals/results/results-<timestamp>-<agent>-<judge>.md`.
 
 ## Stack
 
@@ -146,6 +156,13 @@ Run `make eval` to regenerate. Results written to `evals/results/results-<timest
 | Storage | SQLite + `sqlite-vec` |
 | BM25 | `rank-bm25` |
 | UI | Streamlit |
+
+## Limitations
+
+- **Cold start.** The BM25 index is built in memory at the first query of each process. That costs ~380 ms over 2414 chunks and repeats on every restart. Nothing is persisted.
+- **One session at a time.** `DB` holds a single SQLite connection in a module-level global with `check_same_thread=True`. A second concurrent Streamlit session raises `ProgrammingError`.
+- **Symbol name collisions.** 1296 distinct symbol names cover 2414 chunks. `find_symbol` picks one chunk by a fixed tie-break rule (class, then method, then function, then path). It does not ask which `invoke` you meant.
+- **Citation checking is containment-based.** See the Citations section above for the exact guarantee.
 
 ## What's not included
 

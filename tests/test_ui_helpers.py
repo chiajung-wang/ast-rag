@@ -23,3 +23,18 @@ def test_build_permalink():
     assert "runnables/base.py" in url
     assert "#L10-L50" in url
     assert "1519ed5afbc3bfcc7170b12baa07f1ae7e98edd0" in url
+
+
+def test_build_permalink_includes_package_segment():
+    """A hardcoded libs/core/ prefix dropped langchain_core/ and every link 404'd."""
+    url = build_permalink("runnables/base.py", 10, 50)
+    assert url.endswith(
+        "/libs/core/langchain_core/runnables/base.py#L10-L50"
+    ), url
+
+
+def test_build_permalink_prefix_tracks_corpus_config():
+    """The URL prefix must derive from CORPUS_SUBPATH, not a literal."""
+    from indexer.corpus_config import CORPUS_SUBPATH
+    url = build_permalink("_api/path.py", 1, 2)
+    assert f"/{CORPUS_SUBPATH}/_api/path.py" in url
