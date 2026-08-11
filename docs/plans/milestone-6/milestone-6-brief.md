@@ -40,6 +40,12 @@
 | 6.6 | Repo hygiene | `.github/workflows/`, `.gitignore`, `storage/db.py`, `agent/answer_node.py` | ~2h |
 | 6.7 | Eval instrumentation | `evals/run.py`, `evals/judge_validation.py` (new) | ~4h |
 
+## Out of scope — see `open-questions.md`
+
+`open-questions.md` in this folder holds the decisions that this milestone does not make. It covers 3 items that need the owner's budget or time, 3 that are blocked on data from tasks 6.3 and 6.4, 6 measured defects that milestone 6 leaves alone on purpose, and 4 project-level questions.
+
+Discuss that file after tasks 6.1 to 6.7 land. Do not act on it during the milestone. Several items depend on numbers that do not exist yet.
+
 ## Order
 
 Run 6.1 and 6.2 first. They are small and they stop the system from reporting wrong numbers.
