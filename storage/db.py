@@ -96,7 +96,11 @@ class DB:
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
                    line_start, line_end, docstring, text, embed_text
-            FROM chunks WHERE lower(symbol_name) = lower(?) LIMIT 1
+            FROM chunks WHERE lower(symbol_name) = lower(?)
+            ORDER BY
+                CASE symbol_type WHEN 'class' THEN 0 WHEN 'method' THEN 1 ELSE 2 END,
+                file_path, line_start
+            LIMIT 1
             """,
             (name,),
         ).fetchone()

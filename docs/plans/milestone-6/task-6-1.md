@@ -6,12 +6,12 @@ Fix 5 defects that change results or stop a run. Each one is a small, local chan
 
 ## Acceptance Criteria
 
-- [ ] An exception inside `graph.invoke` produces one printed error and one zero-score run record. The eval loop continues.
-- [ ] `retrieve()` returns the same chunk list for the same query across two separate Python processes.
-- [ ] `find_symbol` applies a documented tie-break rule when several chunks share a name.
-- [ ] `read_file` clamps `line_start` to 1 or greater.
-- [ ] The price table in `evals/run.py` matches the published rate for each model.
-- [ ] `make check` passes.
+- [x] An exception inside `graph.invoke` produces one printed error and one zero-score run record. The eval loop continues.
+- [x] `retrieve()` returns the same chunk list for the same query across two separate Python processes.
+- [x] `find_symbol` applies a documented tie-break rule when several chunks share a name.
+- [x] `read_file` clamps `line_start` to 1 or greater.
+- [x] The price table in `evals/run.py` matches the published rate for each model.
+- [x] `make check` passes.
 
 ## Defects
 
@@ -61,7 +61,7 @@ This rule is arbitrary but stable. Record the rule in `CONTEXT.md` under **Symbo
 
 ### 4. `read_file` has no lower bound — `retrieval/pipeline.py:65-77`
 
-`line_start=0` produces `lines[-1:]`, which returns the last line of the file with no error. Clamp `line_start` to 1 or greater before the slice.
+`line_start=0` produces `lines[-1:actual_end]`. The negative start index resolves to the last line, so the slice returns an empty string for a small range, or a window from the end of the file for a large one. Neither raises. Clamp `line_start` to 1 or greater before the slice.
 
 ### 5. Wrong prices — `evals/run.py:17-21`
 
@@ -83,13 +83,13 @@ Every cost figure in `evals/results/` is wrong. Fix the table. Add a comment tha
 
 ## Steps
 
-- [ ] Initialize `tool_trace = []` at the top of `_run_once` in `evals/run.py`.
-- [ ] Add a test: `_run_once` with a graph that raises returns a zero-score record and does not raise.
-- [ ] Replace the `candidates` set with an ordered, deduplicated list in `retrieval/pipeline.py`.
-- [ ] Add a test: a query with 2 symbol tokens picks the first token in query order.
-- [ ] Add the `ORDER BY` clause to `symbol_lookup` in `storage/db.py`.
-- [ ] Add a test: 3 chunks share a name, and `symbol_lookup` returns the class chunk.
-- [ ] Clamp `line_start` in `read_file` and add a test for `line_start=0`.
-- [ ] Correct the `_PRICES` table in `evals/run.py` and add the rate date in a comment.
-- [ ] Record the `find_symbol` tie-break rule in `CONTEXT.md`.
-- [ ] Run `make check` and confirm all tests pass.
+- [x] Initialize `tool_trace = []` at the top of `_run_once` in `evals/run.py`.
+- [x] Add a test: `_run_once` with a graph that raises returns a zero-score record and does not raise.
+- [x] Replace the `candidates` set with an ordered, deduplicated list in `retrieval/pipeline.py`.
+- [x] Add a test: a query with 2 symbol tokens picks the first token in query order.
+- [x] Add the `ORDER BY` clause to `symbol_lookup` in `storage/db.py`.
+- [x] Add a test: 3 chunks share a name, and `symbol_lookup` returns the class chunk.
+- [x] Clamp `line_start` in `read_file` and add a test for `line_start=0`.
+- [x] Correct the `_PRICES` table in `evals/run.py` and add the rate date in a comment.
+- [x] Record the `find_symbol` tie-break rule in `CONTEXT.md`.
+- [x] Run `make check` and confirm all tests pass.

@@ -21,7 +21,9 @@ The SQLite `.db` file containing: chunk metadata table, sqlite-vec embeddings ta
 Streamlit `st.expander` for each citation. Shows: (1) raw source lines in monospace code block; (2) GitHub permalink `https://github.com/langchain-ai/langchain/blob/{COMMIT_SHA}/libs/core/{path}#L{start}-L{end}` using pinned commit SHA. SHA stored in `indexer/corpus_config.py`.
 
 ## Symbol Lookup
-`find_symbol(name)` matches case-insensitively on `symbol_name`. Returns first match or `None`. Not fuzzy, not prefix — exact modulo case.
+`find_symbol(name)` matches case-insensitively on `symbol_name`. Returns one match or `None`. Not fuzzy, not prefix — exact modulo case.
+
+**Tie-break**: 1296 distinct names cover 2414 chunks, so a name can match many chunks (`__init__` matches 108, `invoke` matches 23). The query orders by `symbol_type` (class, then method, then function), then by `file_path`, then by `line_start`, and takes the first row. The rule is arbitrary but stable. Without it SQLite returns an arbitrary row, and the retrieve node injects that chunk ahead of the RRF results.
 
 ## read_file Bounds
 Max 100 lines per call (`end - start <= 100`). If exceeded, clamps to 100 and appends `"[truncated: requested N lines, returned 100]"` to result. Claude can re-call with narrower range.

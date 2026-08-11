@@ -35,6 +35,8 @@ jobs:
 
 The tests must not need an index or an API key. Check that first. If any test reads `index.db`, mark it with `@pytest.mark.integration` and deselect it in CI.
 
+**Makefile portability.** Every target calls bare `python`, so `make check` fails unless the caller already activated `.venv`. The workflow above avoids the problem, because `uv run` resolves the interpreter itself. Fix the Makefile too: call `uv run python` with a fallback, or state the activation step in `README.md`.
+
 ### 2. `uv.lock` is gitignored
 
 `.gitignore:45` ignores `uv.lock`. The project pins a corpus commit SHA for reproducibility and then leaves its own dependency versions floating. Remove that line and commit the lock file. Remove `package.json`, `package-lock.json`, and `node_modules` from `.gitignore` too. This project has no JavaScript.

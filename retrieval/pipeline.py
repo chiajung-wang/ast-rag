@@ -69,6 +69,7 @@ def read_file(path: str, line_start: int, line_end: int) -> str:
         lines = full_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     except OSError:
         return f"[error: file not found: {path}]"
+    line_start = max(1, line_start)
     requested = line_end - line_start + 1
     actual_end = min(line_end, line_start + MAX_LINES - 1)
     result = "\n".join(lines[line_start - 1 : actual_end])
@@ -79,8 +80,17 @@ def read_file(path: str, line_start: int, line_end: int) -> str:
 
 def retrieve(query: str, k: int = 5) -> list[Chunk]:
     symbol_names = _get_db().all_symbol_names()
-    candidates = {m.group(1) for m in _SYMBOL_RE.finditer(query)}
     lower_map = {s.lower(): s for s in symbol_names}
+
+    # Keep query order. A set iterates in hash order, which Python randomizes
+    # per process, so the chosen symbol would change between runs.
+    seen_candidates: set[str] = set()
+    candidates: list[str] = []
+    for m in _SYMBOL_RE.finditer(query):
+        token = m.group(1)
+        if token not in seen_candidates:
+            seen_candidates.add(token)
+            candidates.append(token)
 
     results: list[Chunk] = []
     seen: set[str] = set()

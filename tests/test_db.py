@@ -79,6 +79,25 @@ def test_symbol_lookup_miss_returns_none(db):
     assert db.symbol_lookup("DoesNotExist") is None
 
 
+def test_symbol_lookup_prefers_class_over_method_and_function(db):
+    """1296 names cover 2414 chunks — collisions need a stable tie-break."""
+    db.insert_chunk(make_chunk("z/last.py", "Tee", "function", None, 1, 5, None, "def Tee(): pass"))
+    db.insert_chunk(make_chunk("m/mid.py", "Tee", "method", "Runnable", 1, 5, None, "def Tee(self): pass"))
+    db.insert_chunk(make_chunk("a/first.py", "Tee", "class", None, 1, 5, None, "class Tee: pass"))
+
+    result = db.symbol_lookup("Tee")
+    assert result.symbol_type == "class"
+    assert result.file_path == "a/first.py"
+
+
+def test_symbol_lookup_tie_break_orders_by_file_path(db):
+    """Same symbol_type in two files — lowest file_path wins, deterministically."""
+    db.insert_chunk(make_chunk("z/last.py", "ToolCall", "class", None, 1, 5, None, "class ToolCall: pass"))
+    db.insert_chunk(make_chunk("a/first.py", "ToolCall", "class", None, 1, 5, None, "class ToolCall: ..."))
+
+    assert db.symbol_lookup("ToolCall").file_path == "a/first.py"
+
+
 def test_chunk_exists_at_hit(db, chunk_a):
     db.insert_chunk(chunk_a)
     # line_start=10, line_end=100 — query range entirely inside

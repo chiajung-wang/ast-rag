@@ -1,6 +1,6 @@
 from unittest.mock import patch, MagicMock
 import json
-from evals.run import compute_score, check_file_ok, format_results_md, compute_cost, run
+from evals.run import compute_score, check_file_ok, format_results_md, compute_cost, run, _run_once
 
 
 def test_score_both_pass():
@@ -130,8 +130,63 @@ def test_format_results_md_structure():
 
 
 def test_compute_cost_haiku():
+    # haiku-4-5 list price: $1.00 in / $5.00 out per MTok
     cost = compute_cost("claude-haiku-4-5", input_tokens=1_000_000, output_tokens=1_000_000)
-    assert abs(cost - 4.80) < 0.01
+    assert abs(cost - 6.00) < 0.01
+
+
+def test_compute_cost_opus():
+    # opus-4-7 list price: $5.00 in / $25.00 out per MTok
+    cost = compute_cost("claude-opus-4-7", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert abs(cost - 30.00) < 0.01
+
+
+def test_run_once_agent_error_returns_zero_score_record():
+    """A raising graph must not kill the run — tool_trace was unbound here."""
+    question = {
+        "id": "q01",
+        "question": "Where is X?",
+        "expected_file_paths": ["runnables/base.py"],
+        "description_must_include": [],
+        "description_must_not_assert": [],
+        "tier": "recall",
+    }
+    mock_graph = MagicMock()
+    mock_graph.invoke.side_effect = RuntimeError("boom")
+
+    with patch("evals.run.graph", mock_graph):
+        result = _run_once(question)
+
+    assert result["score"] == 0
+    assert result["judge"] == "error"
+    assert result["tool_trace"] == []
+    assert result["answer"] == ""
+
+
+def test_run_survives_agent_error(tmp_path):
+    """A failing question must not stop the loop — results still get written."""
+    question = {
+        "id": "q01",
+        "question": "Where is X?",
+        "expected_file_paths": ["runnables/base.py"],
+        "description_must_include": [],
+        "description_must_not_assert": [],
+        "tier": "recall",
+        "subsystem": "runnables",
+    }
+    questions_path = tmp_path / "questions.jsonl"
+    questions_path.write_text(json.dumps(question) + "\n")
+    results_path = tmp_path / "results.md"
+
+    mock_graph = MagicMock()
+    mock_graph.invoke.side_effect = RuntimeError("boom")
+
+    with patch("evals.run.graph", mock_graph):
+        run(str(questions_path), str(results_path), n_runs=1)
+
+    content = results_path.read_text(encoding="utf-8")
+    assert "q01" in content
+    assert "Median total: 0" in content
 
 
 def test_compute_cost_unknown_model_fallback():

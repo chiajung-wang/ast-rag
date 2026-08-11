@@ -14,10 +14,11 @@ from evals.judge_prompt import JUDGE_SYSTEM
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "claude-haiku-4-5")
 AGENT_MODEL = os.environ.get("AGENT_MODEL", "claude-haiku-4-5")
 
+# USD per million tokens, (input, output). List prices as of 2026-08-11.
 _PRICES: dict[str, tuple[float, float]] = {
-    "claude-haiku-4-5": (0.80, 4.00),
+    "claude-haiku-4-5": (1.00, 5.00),
     "claude-sonnet-4-6": (3.00, 15.00),
-    "claude-opus-4-7": (15.00, 75.00),
+    "claude-opus-4-7": (5.00, 25.00),
 }
 
 
@@ -136,6 +137,7 @@ def _run_once(q: dict) -> dict:
     score = 0
     file_ok = False
     judge_str = "error"
+    tool_trace: list[dict] = []
     try:
         result = graph.invoke({
             "messages": [HumanMessage(content=q["question"])],
