@@ -141,3 +141,20 @@ The held-out set has 7 of 15 graded questions naming their symbol, against the d
 3. **The reranker conclusion holds.** No recall@5 to recall@10 gap on either set for either top configuration.
 
 The lesson is about the harness, not the retriever: a 33-question set where 94% of questions name their own answer cannot rank retrieval strategies. Both sets remain too small to settle the architecture, since one question moves held-out recall by 6.7 points.
+
+## A5 refresh — dev ablation re-measured on 45 questions (2026-08-12)
+
+Task 6.4 added 12 dev questions (q35-q46) after this task's ablation ran, and nobody re-ran it. Filed as A5. `verify_embeddings.py` confirmed the OpenRouter-served `text-embedding-3-small` matches the stored index exactly, so this refresh only needed to embed the 12 new questions -- cents, not a re-index.
+
+```
+make eval-retrieval
+```
+
+| configuration | recall@5 | recall@10 | MRR | nDCG@5 |
+|---|---|---|---|---|
+| BM25 only | 42.2% | 60.0% | 0.357 | 0.352 |
+| Dense only | 73.3% | 86.7% | 0.494 | 0.536 |
+| RRF hybrid | 68.9% | 84.4% | 0.502 | 0.531 |
+| RRF + symbol pre-check | 95.6% | 97.8% | 0.908 | 0.912 |
+
+Against the stale 33-question numbers this table replaces: BM25 42.2% (was 39.4%), dense 73.3% (was 69.7%), RRF hybrid 68.9% (was 63.6%), pre-check 95.6% (was 97.0%). Every configuration moved a few points; **none crossed another**. The ranking is identical: pre-check > dense > RRF > BM25 on dev, same as before. The held-out-vs-dev correction above still holds unchanged -- the confound (38/45 questions now name their symbol, was 31/33) and the conclusion that RRF and the pre-check's recall advantage are dev-set artifacts are unaffected by this refresh.

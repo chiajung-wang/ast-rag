@@ -38,27 +38,29 @@ Both return top-10 candidates. **Reciprocal Rank Fusion** (RRF, k=60) merges the
 
 ### What the ablation says about that design
 
-`make eval-retrieval` grades the retriever alone against hand-labeled gold symbols, with no LLM in the loop. 33 questions, binary relevance, a hit requires the right symbol in the right file.
+`make eval-retrieval` grades the retriever alone against hand-labeled gold symbols, with no LLM in the loop. 45 questions, binary relevance, a hit requires the right symbol in the right file.
 
 | configuration | recall@5 | recall@10 | MRR | nDCG@5 |
 |---|---|---|---|---|
-| BM25 only | 39.4% | 54.5% | 0.293 | 0.300 |
-| Dense only | 69.7% | 81.8% | 0.419 | 0.472 |
-| RRF hybrid | 63.6% | 81.8% | 0.439 | 0.468 |
-| **RRF + symbol pre-check** | **97.0%** | **97.0%** | **0.924** | **0.929** |
+| BM25 only | 42.2% | 60.0% | 0.357 | 0.352 |
+| Dense only | 73.3% | 86.7% | 0.494 | 0.536 |
+| RRF hybrid | 68.9% | 84.4% | 0.502 | 0.531 |
+| **RRF + symbol pre-check** | **95.6%** | **97.8%** | **0.908** | **0.912** |
 
-**31 of those 33 questions name their gold symbol verbatim**, and the pre-check is exact symbol-name lookup. So the set is close to purpose-built for it. The held-out set exists to check that, and it changes the answer:
+45 questions, up from the 33 originally measured in task 6.3 — task 6.4 added 12 dev questions without a re-run (filed as A5), refreshed 2026-08-12. Direction is unchanged; recall@5 moved a few points in both directions.
+
+**38 of those 45 questions name their gold symbol verbatim**, and the pre-check is exact symbol-name lookup. So the set is close to purpose-built for it. The held-out set exists to check that, and it changes the answer:
 
 | configuration | dev recall@5 | held-out recall@5 |
 |---|---|---|
-| BM25 only | 39.4% | 73.3% |
-| Dense only | 69.7% | 86.7% |
-| RRF hybrid | 63.6% | **93.3%** |
-| RRF + symbol pre-check | **97.0%** | 93.3% |
+| BM25 only | 42.2% | 73.3% |
+| Dense only | 73.3% | 86.7% |
+| RRF hybrid | 68.9% | **93.3%** |
+| RRF + symbol pre-check | **95.6%** | 93.3% |
 
 Held-out is 15 graded questions, 7 of which name their symbol — a near-even split against the dev set's 31/33. Three conclusions, in order of how much weight they carry:
 
-1. **The dev set's verdict on RRF was an artifact of phrasing.** On dev, RRF looked *worse* than dense alone (63.6% against 69.7%). On held-out it is the best configuration (93.3% against 86.7%). BM25 nearly doubles once questions stop being "Where is X defined?", which is where a lexical index should have been strong all along.
+1. **The dev set's verdict on RRF was an artifact of phrasing.** On dev, RRF looked *worse* than dense alone (68.9% against 73.3%). On held-out it is the best configuration (93.3% against 86.7%). BM25 nearly doubles once questions stop being "Where is X defined?", which is where a lexical index should have been strong all along.
 2. **The pre-check adds no recall on balanced phrasing.** On held-out it scores identically to plain RRF (93.3%), and identically inside both halves of the split: 7/7 naming, 7/8 not naming. What it does add is ranking — MRR 0.880 against 0.813. Its 97% on dev is a symbol-lookup score, not a retrieval score.
 3. **Neither set is large enough to settle the architecture.** At n=15, the 93.3% against 86.7% gap is a single question. Treat the direction as a signal and the magnitude as noise.
 

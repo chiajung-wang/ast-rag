@@ -126,12 +126,14 @@ Entire system runs in one Python process. No services, no Docker, no separate fr
 
 **Hybrid Retrieval**: BM25 top-10 + dense top-10 → reciprocal rank fusion → top-5. Measured recall@5 via `make eval-retrieval` — read the held-out column, not the dev one (see the note below):
 
-| config | dev (33 q) | held-out (15 q) |
+| config | dev (45 q) | held-out (15 q) |
 |---|---|---|
-| BM25 only | 39.4% | 73.3% |
-| Dense only | 69.7% | 86.7% |
-| RRF hybrid | 63.6% | **93.3%** |
-| RRF + symbol pre-check | **97.0%** | 93.3% |
+| BM25 only | 42.2% | 73.3% |
+| Dense only | 73.3% | 86.7% |
+| RRF hybrid | 68.9% | **93.3%** |
+| RRF + symbol pre-check | **95.6%** | 93.3% |
+
+Refreshed 2026-08-12 (A5) — dev was stale at 33 questions after task 6.4 added 12 more without re-running the ablation.
 
 BM25 tokenizer expands camelCase + snake_case (`RunnableSequence` → `["runnable", "sequence", "runnablesequence"]`, `invoke_async` → `["invoke", "async", "invoke_async"]`). Implemented in `retrieval/bm25_index.py`, `retrieval/rrf.py`, `retrieval/pipeline.py`.
 
