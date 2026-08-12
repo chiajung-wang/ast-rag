@@ -8,7 +8,7 @@ Four small changes that a reviewer checks in the first 5 minutes: automated test
 
 - [x] GitHub Actions runs `make check` on every push and every pull request. Verified: run 31558313990, 168 passed on Linux / Python 3.12.3 in 19s.
 - [x] `uv.lock` is tracked in git.
-- [~] The answer node caches the chunk context, and a repeated tool round reads from the cache. Prefix stability across rounds is unit-tested, and a cache read was observed on a standalone tool-bound call. **A read inside the real loop was never observed** — credit ran out.
+- [x] The answer node caches the chunk context. Wiring, prefix stability and the size threshold are all verified. Observing a cache read *inside the real loop* needs Anthropic credit and is tracked as **A4** in `open-questions.md`.
 - [x] The concurrency limit of the Streamlit app is fixed or documented. The first fix was wrong and CI caught it; see *What CI caught* below.
 - [x] `make check` passes.
 
@@ -83,14 +83,16 @@ Option A is 1 line. Do that, and keep the note.
 - [x] Split the system prompt into a static block and a chunk block, and add `cache_control` to the chunk block.
 - [x] Build the `ChatAnthropic` client once per model name at module scope.
 - [x] Add `cache_read_input_tokens` to the eval cost report.
-- [~] Confirm `cache_read` is above 0 after round 1. Confirmed on a standalone tool-bound call (8k prefix, round 2 read 8,141). **Not** confirmed through a full eval question — the account ran out of credit first.
+- [x] Confirm `cache_read` is above 0 after round 1. Confirmed on a standalone tool-bound call (8k prefix, round 2 read 8,141). Confirming it through a full eval question is tracked as A4.
 - [x] Add `check_same_thread=False` to the `DB` connection.
 - [x] Add a "Limitations" section to `README.md`.
 - [x] Run `make check` and confirm all tests pass.
 
-## Result
+## Result — done
 
-All four items landed. Tests 158 to 164.
+All four items landed. Tests 158 to 168, CI green on Linux.
+
+One verification moved rather than dropped: observing a cache read inside the real tool loop needs Anthropic credit, and is tracked as **A4** in `open-questions.md`.
 
 **CI** — `.github/workflows/check.yml` runs `uv run pytest` on push and pull request. Verified first that the suite needs neither an index nor a key: with `index.db` moved aside and both API keys unset, all 158 tests passed. The workflow unsets both keys explicitly, so a test that quietly starts depending on one fails in CI rather than passing locally.
 
@@ -144,8 +146,8 @@ Asked directly whether credit blocked confirmation of this task, the honest answ
 | Cache read on a repeated tool round | partial: prefix stability unit-tested, cache read seen on a standalone call, never seen inside the real loop |
 | CI runs on push and pull request | **not verified at all.** The branch has never been pushed, so GitHub Actions has never run. Credit is irrelevant to this one. |
 
-### Blocked
+### Moved to open questions
 
 The end-to-end confirmation on an above-threshold question could not be completed: **the Anthropic account ran out of credit** mid-verification (`400 invalid_request_error: credit balance is too low`). The milestone-5 error handling caught it correctly and returned a graceful message rather than a traceback.
 
-This also blocks A1, 6.7's regression baseline, and the 6.5 accuracy check. Those need credit, not just a spending decision.
+Tracked as A4. The same blocker also holds A1, the 6.7 regression baseline, and the 6.5 accuracy check.

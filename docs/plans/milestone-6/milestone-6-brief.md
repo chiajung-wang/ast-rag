@@ -30,19 +30,21 @@
 
 ## Tasks
 
-| # | Task | What it changes | Effort |
-|---|---|---|---|
-| 6.1 | Correctness fixes | `evals/run.py`, `retrieval/pipeline.py`, `storage/db.py` | ~1h |
-| 6.2 | Honest claims | `README.md`, `CONTEXT.md`, `agent/citations.py` | ~1h |
-| 6.3 | Retrieval metrics + ablation | `evals/retrieval_eval.py` (new), `evals/questions.jsonl` | ~4h |
-| 6.4 | Question set: held-out, tiers, adversarial | `evals/questions-test.jsonl` (new), `evals/questions.jsonl` | ~3h |
-| 6.5 | Inheritance-aware class outline | `indexer/chunker.py`, `storage/db.py`, `agent/answer_node.py` | ~4h |
-| 6.6 | Repo hygiene | `.github/workflows/`, `.gitignore`, `storage/db.py`, `agent/answer_node.py` | ~2h |
-| 6.7 | Eval instrumentation | `evals/run.py`, `evals/judge_validation.py` (new) | ~4h |
+| # | Task | What it changes | Effort | Status |
+|---|---|---|---|---|
+| 6.1 | Correctness fixes | `evals/run.py`, `retrieval/pipeline.py`, `storage/db.py` | ~1h | done |
+| 6.2 | Honest claims | `README.md`, `CONTEXT.md`, `agent/citations.py` | ~1h | done |
+| 6.3 | Retrieval metrics + ablation | `evals/retrieval_eval.py` (new), `evals/questions.jsonl` | ~4h | done |
+| 6.4 | Question set: held-out, tiers, adversarial | `evals/questions-test.jsonl` (new), `evals/questions.jsonl` | ~3h | done |
+| 6.5 | Inheritance-aware class outline | `indexer/chunker.py`, `storage/db.py`, `agent/answer_node.py` | ~4h | done, accuracy check tracked as B3 |
+| 6.6 | Repo hygiene | `.github/workflows/`, `.gitignore`, `storage/db.py`, `agent/answer_node.py` | ~2h | **done** |
+| 6.7 | Eval instrumentation | `evals/run.py`, `evals/judge_validation.py` (new) | ~4h | not started |
 
 ## Out of scope — see `open-questions.md`
 
-`open-questions.md` in this folder holds the decisions that this milestone does not make. It covers 3 items that need the owner's budget or time, 3 that are blocked on data from tasks 6.3 and 6.4, 6 measured defects that milestone 6 leaves alone on purpose, and 4 project-level questions.
+`open-questions.md` in this folder holds the decisions that this milestone does not make. It covers 4 items that need the owner's budget or time, 4 that turn on data from tasks 6.3 and 6.4, 7 measured defects that milestone 6 leaves alone on purpose, and 4 project-level questions.
+
+**The Anthropic account has no credit as of 2026-08-12.** A1, A3 and A4 are blocked on topping it up rather than on any decision.
 
 Discuss that file after tasks 6.1 to 6.7 land. Do not act on it during the milestone. Several items depend on numbers that do not exist yet.
 

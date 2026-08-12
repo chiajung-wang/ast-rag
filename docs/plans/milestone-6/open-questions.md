@@ -10,13 +10,17 @@ Status key: **OPEN** — needs a decision. **BLOCKED** — needs data first. **P
 
 ## A. Needs the owner's budget or time
 
-### A1. Re-run the eval at n=3 — OPEN
+> **The Anthropic account has no credit.** Verified 2026-08-12: any agent or judge call returns `400 invalid_request_error — Your credit balance is too low to access the Anthropic API`. Every item in this group that spends Anthropic tokens (A1, A3, A4) is blocked on topping up, not on deciding to spend. Measured cost is small: ~$0.62 for a held-out n=1 run, ~$1.82 for dev n=1, ~$5.46 for dev n=3. OpenAI is unaffected, so `make eval-retrieval` still runs.
+
+### A1. Re-run the eval at n=3 — BLOCKED on credit
 
 `README.md` publishes 63/67 at n=1. The runner defaults to n=3 and reports a median and a variance. A single sample carries no variance figure, so the headline number is the weakest form of the eval that the code supports.
 
 Cost: 34 questions, 3 runs, one agent call and one judge call per run. Task 6.1 corrected the price table, so the figure the runner prints is now real.
 
-Decision: spend the budget, or keep the n=1 number with its stated caveat. Task 6.2 left the caveat in place.
+Decision: top up and run, or keep the n=1 number with its stated caveat. Task 6.2 left the caveat in place.
+
+This also gates the regression baseline in task 6.7, which cannot commit a threshold it has never measured, and the accuracy check in task 6.5, which needs a held-out score before and after the prompt hack was removed.
 
 ### A2. Who writes the labels and the held-out questions — OPEN
 
@@ -26,11 +30,25 @@ The labels must come from the langchain-core source, not from the current retrie
 
 Decision: who writes them, and whether an agent may draft them for human review.
 
-### A3. Judge validation sample — OPEN
+### A3. Judge validation sample — BLOCKED on credit and on owner time
 
 Task 6.7 needs 40 hand-labeled `(question, answer)` pairs to compute agreement with the LLM judge. The labeler must not see the judge verdict first.
 
 Same constraint as A2: the point of the exercise is an independent human opinion.
+
+### A4. Confirm prompt caching engages inside the real tool loop — BLOCKED on credit
+
+Moved out of task 6.6, which is otherwise complete.
+
+What is already established:
+
+- The mechanism works. A standalone tool-bound call with an 8k-token prefix reported `cache_read=8141` on its second round.
+- The prefix is stable across rounds. A unit test asserts the system block is byte-identical between tool rounds, which is the necessary condition and the part this code controls.
+- The threshold is real and measured. Haiku 4.5 declines a prefix under 4096 tokens and gives no signal. Across 5 sample questions the prompt runs 3,395 / 4,154 / 7,319 / 8,615 / 29,231 tokens, so most questions qualify and small-chunk ones do not.
+
+What is missing: a single observation of `cache_read > 0` from a real `answer_node` run on an above-threshold question. The one full run that completed used a 3,395-token question — below the line — and correctly reported 0. Credit ran out before a second attempt.
+
+To close it, run any question whose prompt clears ~4096 tokens and read `cache_read_tokens` off the answer, for example `"How does RunnableWithFallbacks decide when to invoke a fallback?"` at 7,319 tokens. Cost is a fraction of a cent. `evals/run.py` already reports the figure per run, so a single `make eval` closes this as a side effect.
 
 ---
 
