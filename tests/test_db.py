@@ -297,3 +297,36 @@ def test_db_concurrent_reads_from_many_threads(tmp_path):
         t.join()
 
     assert not errors, errors
+
+
+def test_no_query_bypasses_the_lock():
+    """Structural guard for the bug CI caught on 2026-08-12.
+
+    check_same_thread=False only permits sharing a connection between
+    threads; the lock is what makes it safe. Any statement issued outside
+    _fetchall / _fetchone / _exec / _executescript / _commit reintroduces the
+    InterfaceError seen on the Linux runner, where sqlite3.threadsafety is 1
+    rather than the 3 found on macOS. Locally this passes either way, so a
+    structural check is the only thing that catches it before CI does.
+    """
+    import ast
+    import inspect
+    import storage.db
+
+    source = inspect.getsource(storage.db)
+    tree = ast.parse(source)
+    db_class = next(n for n in tree.body
+                    if isinstance(n, ast.ClassDef) and n.name == "DB")
+
+    allowed = {"__init__", "_fetchall", "_fetchone", "_exec", "_executescript", "_commit"}
+    offenders = []
+    for method in db_class.body:
+        if not isinstance(method, ast.FunctionDef) or method.name in allowed:
+            continue
+        for node in ast.walk(method):
+            if (isinstance(node, ast.Attribute)
+                    and isinstance(node.value, ast.Attribute)
+                    and node.value.attr == "conn"):
+                offenders.append(f"{method.name} -> self.conn.{node.attr}")
+
+    assert not offenders, "statements bypassing the lock: " + ", ".join(offenders)

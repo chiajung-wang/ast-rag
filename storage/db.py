@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import struct
+import threading
 from dataclasses import dataclass, field
 from storage.chunk import Chunk, make_chunk
 
@@ -34,12 +35,20 @@ def _serialize(v: list[float]) -> bytes:
 
 class DB:
     def __init__(self, path: str = "index.db"):
-        # check_same_thread=False: Streamlit runs one script thread per browser
-        # session, and the connection lives in a module-level global, so a
-        # second session hit "SQLite objects created in a thread can only be
-        # used in that same thread". Every query path here is read-only; the
-        # indexer writes from a single thread.
+        # Streamlit runs one script thread per browser session, and this
+        # connection lives in a module-level global, so a second session hit
+        # "SQLite objects created in a thread can only be used in that same
+        # thread".
+        #
+        # check_same_thread=False lifts Python's guard but does NOT make the
+        # connection safe to share -- that depends on how SQLite was compiled.
+        # sqlite3.threadsafety is 3 (serialized) on macOS here but 1
+        # (multi-thread, connection not shareable) on the Linux CI runner,
+        # where four threads reading concurrently raised InterfaceError and
+        # IndexError. The flag only permits sharing; _lock makes it safe.
+        # Reentrant, so a locked method may call another locked method.
         self.conn = sqlite3.connect(path, check_same_thread=False)
+        self._lock = threading.RLock()
         self.conn.row_factory = sqlite3.Row
         self.conn.enable_load_extension(True)
         import sqlite_vec
@@ -47,8 +56,33 @@ class DB:
         self.conn.enable_load_extension(False)
         self._init_schema()
 
+    # ── connection access ─────────────────────────────────────────────────
+    # Every statement goes through these, so the lock cannot be forgotten.
+    # Rows are materialised while the lock is held: handing back a live cursor
+    # would move the real connection access outside it.
+
+    def _fetchall(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+        with self._lock:
+            return self.conn.execute(sql, params).fetchall()
+
+    def _fetchone(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
+        with self._lock:
+            return self.conn.execute(sql, params).fetchone()
+
+    def _exec(self, sql: str, params: tuple = ()) -> None:
+        with self._lock:
+            self.conn.execute(sql, params)
+
+    def _executescript(self, script: str) -> None:
+        with self._lock:
+            self.conn.executescript(script)
+
+    def _commit(self) -> None:
+        with self._lock:
+            self.conn.commit()
+
     def _init_schema(self) -> None:
-        self.conn.executescript(f"""
+        self._executescript(f"""
             CREATE TABLE IF NOT EXISTS chunks (
                 id          TEXT PRIMARY KEY,
                 file_path   TEXT NOT NULL,
@@ -71,12 +105,12 @@ class DB:
         # CREATE TABLE IF NOT EXISTS will not add a column to an index built
         # before base_classes existed. Migrate in place so an old .db keeps
         # working; the column stays empty until the next `make index`.
-        existing = {row[1] for row in self.conn.execute("PRAGMA table_info(chunks)")}
+        existing = {row[1] for row in self._fetchall("PRAGMA table_info(chunks)")}
         if "base_classes" not in existing:
-            self.conn.execute(
+            self._exec(
                 "ALTER TABLE chunks ADD COLUMN base_classes TEXT NOT NULL DEFAULT '[]'"
             )
-        self.conn.commit()
+        self._commit()
 
     def insert_chunk(self, chunk: Chunk) -> int:
         """Insert a chunk, or refresh base_classes on one already stored.
@@ -84,43 +118,46 @@ class DB:
         The chunk id excludes base_classes, so re-indexing an existing corpus
         fills the column in place without invalidating a single embedding.
         """
-        self.conn.execute(
-            """
-            INSERT INTO chunks
-                (id, file_path, symbol_name, symbol_type, parent_class,
-                 line_start, line_end, docstring, text, embed_text, base_classes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET base_classes = excluded.base_classes
-            """,
-            (
-                chunk.id, chunk.file_path, chunk.symbol_name, chunk.symbol_type,
-                chunk.parent_class, chunk.line_start, chunk.line_end,
-                chunk.docstring, chunk.text, chunk.embed_text,
-                json.dumps(chunk.base_classes),
-            ),
-        )
-        self.conn.commit()
-        # Unconditional lookup: an upsert that took the UPDATE branch does not
-        # give a reliable lastrowid.
-        row = self.conn.execute(
-            "SELECT rowid FROM chunks WHERE id = ?", (chunk.id,)
-        ).fetchone()
-        return row["rowid"]
+        # Write, commit and read-back are one critical section: another thread
+        # must not interleave between the upsert and the rowid lookup.
+        with self._lock:
+            self._exec(
+                """
+                INSERT INTO chunks
+                    (id, file_path, symbol_name, symbol_type, parent_class,
+                     line_start, line_end, docstring, text, embed_text, base_classes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET base_classes = excluded.base_classes
+                """,
+                (
+                    chunk.id, chunk.file_path, chunk.symbol_name, chunk.symbol_type,
+                    chunk.parent_class, chunk.line_start, chunk.line_end,
+                    chunk.docstring, chunk.text, chunk.embed_text,
+                    json.dumps(chunk.base_classes),
+                ),
+            )
+            self._commit()
+            # Unconditional lookup: an upsert that took the UPDATE branch does
+            # not give a reliable lastrowid.
+            row = self._fetchone(
+                "SELECT rowid FROM chunks WHERE id = ?", (chunk.id,)
+            )
+            return row["rowid"]
 
     def has_embedding(self, rowid: int) -> bool:
-        return self.conn.execute(
+        return self._fetchone(
             "SELECT rowid FROM vec_chunks WHERE rowid = ?", (rowid,)
-        ).fetchone() is not None
+        ) is not None
 
     def insert_embedding(self, rowid: int, embedding: list[float]) -> None:
-        self.conn.execute(
+        self._exec(
             "INSERT OR REPLACE INTO vec_chunks(rowid, embedding) VALUES (?, ?)",
             (rowid, _serialize(embedding)),
         )
-        self.conn.commit()
+        self._commit()
 
     def vector_search(self, embedding: list[float], k: int = 10) -> list[Chunk]:
-        rows = self.conn.execute(
+        rows = self._fetchall(
             """
             SELECT c.id, c.file_path, c.symbol_name, c.symbol_type, c.parent_class,
                    c.line_start, c.line_end, c.docstring, c.text, c.embed_text, c.base_classes
@@ -131,11 +168,11 @@ class DB:
             ORDER BY distance
             """,
             (_serialize(embedding), k),
-        ).fetchall()
+        )
         return [_row_to_chunk(r) for r in rows]
 
     def symbol_lookup(self, name: str) -> Chunk | None:
-        row = self.conn.execute(
+        row = self._fetchone(
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
                    line_start, line_end, docstring, text, embed_text, base_classes
@@ -146,36 +183,36 @@ class DB:
             LIMIT 1
             """,
             (name,),
-        ).fetchone()
+        )
         return _row_to_chunk(row) if row else None
 
     def chunk_exists_at(self, file_path: str, line_start: int, line_end: int) -> bool:
-        return self.conn.execute(
+        return self._fetchone(
             """
             SELECT 1 FROM chunks
             WHERE file_path = ? AND line_start <= ? AND line_end >= ?
             LIMIT 1
             """,
             (file_path, line_start, line_end),
-        ).fetchone() is not None
+        ) is not None
 
     def all_chunks(self) -> list[Chunk]:
-        rows = self.conn.execute(
+        rows = self._fetchall(
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
                    line_start, line_end, docstring, text, embed_text, base_classes
             FROM chunks
             """
-        ).fetchall()
+        )
         return [_row_to_chunk(r) for r in rows]
 
     def all_symbol_names(self) -> set[str]:
-        rows = self.conn.execute("SELECT symbol_name FROM chunks").fetchall()
+        rows = self._fetchall("SELECT symbol_name FROM chunks")
         return {r["symbol_name"] for r in rows}
 
     def _find_class(self, class_name: str) -> Chunk | None:
         """Resolve a class by name. Ties break on file_path, then line_start."""
-        row = self.conn.execute(
+        row = self._fetchone(
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
                    line_start, line_end, docstring, text, embed_text, base_classes
@@ -185,14 +222,14 @@ class DB:
             LIMIT 1
             """,
             (class_name,),
-        ).fetchone()
+        )
         return _row_to_chunk(row) if row else None
 
     def _methods_of(self, class_name: str, file_path: str) -> list[Chunk]:
         """Methods of one class. Scoped to its file so same-named classes
         in different modules do not merge (NoLock, RunInfo, Tee, ToolCall,
         ToolCallChunk each appear twice in this corpus)."""
-        rows = self.conn.execute(
+        rows = self._fetchall(
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
                    line_start, line_end, docstring, text, embed_text, base_classes
@@ -201,19 +238,19 @@ class DB:
             ORDER BY line_start
             """,
             (class_name, file_path),
-        ).fetchall()
+        )
         return [_row_to_chunk(r) for r in rows]
 
     def _subclasses_of(self, class_name: str) -> list[Chunk]:
         """Direct subclasses inside the corpus. 331 class chunks, so a scan
         is cheaper than teaching SQLite to read the JSON column."""
-        rows = self.conn.execute(
+        rows = self._fetchall(
             """
             SELECT id, file_path, symbol_name, symbol_type, parent_class,
                    line_start, line_end, docstring, text, embed_text, base_classes
             FROM chunks WHERE symbol_type = 'class'
             """
-        ).fetchall()
+        )
         target = class_name.lower()
         return sorted(
             (c for c in map(_row_to_chunk, rows)
