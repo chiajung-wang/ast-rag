@@ -199,7 +199,8 @@ The held-out set *has* been scored on retrieval, which is free — see the ablat
 ## Limitations
 
 - **Cold start.** The BM25 index is built in memory at the first query of each process. That costs ~380 ms over 2414 chunks and repeats on every restart. Nothing is persisted.
-- **One session at a time.** `DB` holds a single SQLite connection in a module-level global with `check_same_thread=True`. A second concurrent Streamlit session raises `ProgrammingError`.
+- **Prompt caching is size-dependent.** The system prompt is marked as one cacheable block, but Haiku 4.5 will not cache a prefix under 4096 tokens and gives no signal when it declines. Measured across 5 sample questions this prompt runs 3,395 to 29,231 tokens (median 7,319), so most questions cache and small-chunk ones do not. `cache_read_tokens` is reported per run so the effect is measured rather than assumed.
+- **Concurrency is read-only.** `DB` holds one SQLite connection in a module-level global, opened with `check_same_thread=False` so a second Streamlit session does not raise. Every query path is a read; the indexer writes single-threaded.
 - **Symbol name collisions.** 1296 distinct symbol names cover 2414 chunks. `find_symbol` picks one chunk by a fixed tie-break rule (class, then method, then function, then path). It does not ask which `invoke` you meant.
 - **Citation checking is containment-based.** See the Citations section above for the exact guarantee.
 

@@ -70,6 +70,31 @@ def read_file(path: str, line_start: int, line_end: int) -> str:
     return _read_file(path, line_start, line_end)
 
 
+_MODELS: dict[str, ChatAnthropic] = {}
+
+
+def _get_model(model_name: str, *, with_tools: bool = True) -> ChatAnthropic:
+    """One client per (model, tool-binding). Rebuilding it per call threw away
+    the connection pool and cost a little latency on every round."""
+    key = f"{model_name}:{'tools' if with_tools else 'plain'}"
+    if key not in _MODELS:
+        model = ChatAnthropic(model=model_name, temperature=0)
+        if with_tools:
+            model = model.bind_tools([get_class_outline, read_file])
+        _MODELS[key] = model
+    return _MODELS[key]
+
+
+def reset_model_cache() -> None:
+    """Drop cached clients.
+
+    The cache is keyed by model name and lives for the process, which is what
+    a long-running Streamlit session wants. Tests need it cleared between
+    cases, and anything that rotates credentials at runtime does too.
+    """
+    _MODELS.clear()
+
+
 def _build_system_prompt(chunks) -> str:
     if chunks:
         chunk_context = "\n\n".join(
@@ -109,22 +134,72 @@ def _build_system_prompt(chunks) -> str:
     )
 
 
+def _build_system_message(chunks) -> SystemMessage:
+    """System prompt as one cacheable block.
+
+    The tool loop re-sends this on every round, up to MAX_TOOL_ROUNDS, and the
+    chunk context is the bulk of it — full source text for 5 chunks. Marking
+    the block lets later rounds of the same question read the prefix at
+    roughly a tenth of the input price.
+
+    **It only engages above the model's minimum cacheable prefix, which is
+    4096 tokens on Haiku 4.5.** Below that the block silently does not cache:
+    no error, no warning, `cache_read` just stays 0. Measured over 5 sample
+    questions, this prompt runs 3,395 / 4,154 / 7,319 / 8,615 / 29,231 tokens
+    — median 7,319, so most questions cache and a small-chunk question like
+    "what events does BaseCallbackHandler expose?" (3,395) does not. That is
+    acceptable: the questions that miss the threshold are the cheap ones.
+
+    Verified against the API that the mechanism works: with tools bound and
+    an 8k-token prefix, round 2 reported cache_read=8141.
+
+    One breakpoint, not two. Splitting the static instructions into their own
+    cached block looks appealing, but they are ~700 tokens on their own — far
+    under the minimum — so that breakpoint would silently never cache.
+
+    Note the write is reported under `ephemeral_5m_input_tokens`, not under
+    `cache_creation`, which stays 0 even on a successful write.
+
+    Caching is a prefix match, so nothing above this block may vary per
+    request. It does not: tools are static and the instructions are a
+    constant.
+    """
+    return SystemMessage(content=[{
+        "type": "text",
+        "text": _build_system_prompt(chunks),
+        "cache_control": {"type": "ephemeral"},
+    }])
+
+
 def answer_node(state: AgentState) -> dict:
     model_name = os.environ.get("AGENT_MODEL", "claude-haiku-4-5")
-    model = ChatAnthropic(model=model_name, temperature=0).bind_tools([get_class_outline, read_file])
-    system = SystemMessage(content=_build_system_prompt(state["retrieved_chunks"]))
+    model = _get_model(model_name)
+    system = _build_system_message(state["retrieved_chunks"])
     messages: list = [system] + list(state["messages"])
 
     response = None
     total_input_tokens = 0
     total_output_tokens = 0
+    total_cache_read = 0
+    total_cache_write = 0
     tool_trace: list[dict] = []
 
     def _add_usage(r):
         nonlocal total_input_tokens, total_output_tokens
+        nonlocal total_cache_read, total_cache_write
         u = r.usage_metadata or {}
         total_input_tokens += u.get("input_tokens", 0)
         total_output_tokens += u.get("output_tokens", 0)
+        # Cache hits are the only evidence that the breakpoint actually took.
+        # A prefix under the model's minimum caches silently not at all.
+        details = u.get("input_token_details") or {}
+        total_cache_read += details.get("cache_read", 0)
+        # A successful write lands in ephemeral_5m_input_tokens; cache_creation
+        # stays 0. Read both so the figure is not silently always zero.
+        total_cache_write += (
+            details.get("cache_creation", 0)
+            or details.get("ephemeral_5m_input_tokens", 0)
+        )
 
     budget_exhausted = False
     try:
@@ -146,8 +221,7 @@ def answer_node(state: AgentState) -> dict:
                 "context already gathered. Do not request any more tools. "
                 "Cite with [path:start-end] for every claim."
             )))
-            model_no_tools = ChatAnthropic(model=model_name, temperature=0)
-            response = model_no_tools.invoke(messages)
+            response = _get_model(model_name, with_tools=False).invoke(messages)
             _add_usage(response)
     except anthropic.APIError as e:
         return {"messages": list(state["messages"]) + [
@@ -170,7 +244,16 @@ def answer_node(state: AgentState) -> dict:
             "input_tokens": total_input_tokens,
             "output_tokens": total_output_tokens,
             "total_tokens": total_input_tokens + total_output_tokens,
+            "input_token_details": {
+                "cache_read": total_cache_read,
+                "cache_creation": total_cache_write,
+            },
         },
-        additional_kwargs={"tool_trace": tool_trace, "budget_exhausted": budget_exhausted},
+        additional_kwargs={
+            "tool_trace": tool_trace,
+            "budget_exhausted": budget_exhausted,
+            "cache_read_tokens": total_cache_read,
+            "cache_write_tokens": total_cache_write,
+        },
     )
     return {"messages": list(state["messages"]) + [final]}

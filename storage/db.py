@@ -34,7 +34,12 @@ def _serialize(v: list[float]) -> bytes:
 
 class DB:
     def __init__(self, path: str = "index.db"):
-        self.conn = sqlite3.connect(path)
+        # check_same_thread=False: Streamlit runs one script thread per browser
+        # session, and the connection lives in a module-level global, so a
+        # second session hit "SQLite objects created in a thread can only be
+        # used in that same thread". Every query path here is read-only; the
+        # indexer writes from a single thread.
+        self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.enable_load_extension(True)
         import sqlite_vec

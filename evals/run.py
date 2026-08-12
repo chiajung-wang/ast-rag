@@ -138,6 +138,7 @@ def _run_once(q: dict) -> dict:
     file_ok = False
     judge_str = "error"
     tool_trace: list[dict] = []
+    cache_read = 0
     try:
         result = graph.invoke({
             "messages": [HumanMessage(content=q["question"])],
@@ -152,6 +153,7 @@ def _run_once(q: dict) -> dict:
             usage.get("output_tokens", 0),
         )
         tool_trace = last_msg.additional_kwargs.get("tool_trace", [])
+        cache_read = last_msg.additional_kwargs.get("cache_read_tokens", 0)
         budget_exhausted = last_msg.additional_kwargs.get("budget_exhausted", False)
         file_ok = check_file_ok(q["expected_file_paths"], answer)
         judge_pass, judge_in, judge_out = _judge(
@@ -172,6 +174,7 @@ def _run_once(q: dict) -> dict:
     except Exception as exc:
         print(f"    ERROR: {exc!r}")
     return {
+        "cache_read_tokens": cache_read,
         "score": score,
         "file_ok": file_ok,
         "judge": judge_str,

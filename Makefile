@@ -1,23 +1,27 @@
+# Prefer `uv run` so targets work without activating .venv first.
+# Falls back to bare python for a pip install.
+PY := $(shell command -v uv >/dev/null 2>&1 && echo 'uv run python' || echo 'python')
+
 .PHONY: install run index eval eval-test eval-retrieval check
 
 install:
 	uv sync || pip install -e ".[dev]"
 
 index:
-	python -m indexer
+	$(PY) -m indexer
 
 run:
-	streamlit run app.py
+	$(shell command -v uv >/dev/null 2>&1 && echo 'uv run' || echo '') streamlit run app.py
 
 eval:
-	python evals/run.py
+	$(PY) evals/run.py
 
 eval-test:
-	python evals/run.py --questions evals/questions-test.jsonl
+	$(PY) evals/run.py --questions evals/questions-test.jsonl
 
 eval-retrieval:
-	python -m evals.retrieval_eval
-	python -m evals.retrieval_eval --questions evals/questions-test.jsonl
+	$(PY) -m evals.retrieval_eval
+	$(PY) -m evals.retrieval_eval --questions evals/questions-test.jsonl
 
 check:
-	python -m pytest tests/ -v
+	$(PY) -m pytest tests/ -v
