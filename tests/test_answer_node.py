@@ -284,3 +284,41 @@ def test_system_prefix_is_byte_stable_across_tool_rounds():
     assert len(seen_systems) == 2, "expected a tool round then a final round"
     assert seen_systems[0] == seen_systems[1], "system prefix changed between rounds"
     assert seen_systems[0][0]["cache_control"] == {"type": "ephemeral"}
+
+
+# ── malformed tool-call args (2026-08-12 finding) ────────────────────────────
+
+@patch("agent.answer_node.ChatOpenAI")
+@patch("agent.answer_node._get_db")
+def test_malformed_tool_args_fed_back_not_crashed(mock_get_db, mock_anthropic):
+    """A model that packs "path:start-end" into read_file's path field (instead
+    of separate path/line_start/line_end) used to raise an uncaught pydantic
+    ValidationError that killed graph.invoke entirely. It must now come back
+    as an error ToolMessage the model can recover from, same as a bad path or
+    bad line range already do."""
+    mock_get_db.return_value = _mock_db(exists=True)
+    bad_call = AIMessage(
+        content="",
+        tool_calls=[{
+            "name": "read_file",
+            # real read_file requires path, line_start, line_end -- this omits
+            # the last two, which is exactly the shape sonnet-5 produced.
+            "args": {"path": "language_models/chat_models.py:1767-1926"},
+            "id": "tc1",
+            "type": "tool_call",
+        }],
+    )
+    final = AIMessage(content="Answer [runnables/base.py:10-50]")
+    mock_anthropic.return_value = _mock_model([bad_call, final])
+
+    state = AgentState(messages=[HumanMessage("q")], retrieved_chunks=[])
+
+    from agent.answer_node import answer_node
+    result = answer_node(state)  # must not raise
+
+    # answer_node returns only the final AIMessage, not the intermediate
+    # ToolMessage -- the recovery is verified by the loop completing at all
+    # (no raise) and reaching the model's post-error final answer.
+    assert len(result["messages"]) == 2
+    assert "Answer" in result["messages"][-1].content
+    assert result["messages"][-1].additional_kwargs["tool_trace"][0]["tool"] == "read_file"

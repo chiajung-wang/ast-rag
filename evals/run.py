@@ -19,9 +19,14 @@ AGENT_MODEL = provider.agent_model()
 # through unchanged, so these match Anthropic list prices as of 2026-08-12.
 # Keys are OpenRouter slugs: a miss here falls back to the Sonnet rate and
 # silently misprices every run, which is the bug task 6.1 fixed.
+#
+# Sonnet 5 uses dashes (claude-sonnet-5), not the dots seen on 4.5/4.6 --
+# verified against openrouter.ai/anthropic/claude-sonnet-5. Its $2/$10 rate is
+# an introductory price through 2026-08-31; standard is $3/$15, same as 4.6.
 _PRICES: dict[str, tuple[float, float]] = {
     "anthropic/claude-haiku-4.5": (1.00, 5.00),
     "anthropic/claude-sonnet-4.6": (3.00, 15.00),
+    "anthropic/claude-sonnet-5": (2.00, 10.00),
     "anthropic/claude-opus-4.7": (5.00, 25.00),
 }
 
@@ -78,6 +83,7 @@ def format_results_md(rows: list[dict], n_runs: int) -> str:
             lines.append(
                 f"**Run {i}**: score={run['score']} file_ok={run['file_ok']}"
                 f" judge={run['judge']} agent=${run['agent_cost']:.4f} judge=${run['judge_cost']:.4f}"
+                f" cache_read={run.get('cache_read_tokens', 0)}"
             )
             trace = run.get("tool_trace", [])
             if trace:

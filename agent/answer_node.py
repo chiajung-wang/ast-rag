@@ -224,9 +224,24 @@ def answer_node(state: AgentState) -> dict:
             messages.append(response)
             for tc in response.tool_calls:
                 fn = get_class_outline if tc["name"] == "get_class_outline" else read_file
-                result = fn.invoke(tc["args"])
                 tool_trace.append({"round": round_num + 1, "tool": tc["name"], "args": tc["args"]})
-                messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
+                try:
+                    # Malformed args (e.g. a model packing "path:start-end" into
+                    # a single field instead of the 3 separate ones) raise a
+                    # pydantic ValidationError here. Left uncaught this killed
+                    # the whole question -- graph.invoke propagates it past
+                    # answer_node's own except (which only catches provider
+                    # errors), and the eval layer's broad except turns a
+                    # one-tool-call slip into score=0. Feed it back instead, the
+                    # same way a wrong path or bad line range already is.
+                    result = fn.invoke(tc["args"])
+                    is_error = False
+                except Exception as exc:  # noqa: BLE001 - any bad tool call
+                    result = f"[error: invalid arguments for {tc['name']}: {exc}]"
+                    is_error = True
+                messages.append(ToolMessage(
+                    content=str(result), tool_call_id=tc["id"], status="error" if is_error else "success"
+                ))
         else:
             budget_exhausted = True
             messages.append(HumanMessage(content=(
