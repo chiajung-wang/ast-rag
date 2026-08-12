@@ -6,10 +6,10 @@ Four small changes that a reviewer checks in the first 5 minutes: automated test
 
 ## Acceptance Criteria
 
-- [~] GitHub Actions runs `make check` on every push and every pull request. Workflow written and its command verified locally. **Never executed** — the branch is not pushed, so Actions has not run once.
+- [x] GitHub Actions runs `make check` on every push and every pull request. Verified: run 31558313990, 168 passed on Linux / Python 3.12.3 in 19s.
 - [x] `uv.lock` is tracked in git.
 - [~] The answer node caches the chunk context, and a repeated tool round reads from the cache. Prefix stability across rounds is unit-tested, and a cache read was observed on a standalone tool-bound call. **A read inside the real loop was never observed** — credit ran out.
-- [x] The concurrency limit of the Streamlit app is fixed or documented. Covered by two threading tests, added after the first pass shipped the change untested.
+- [x] The concurrency limit of the Streamlit app is fixed or documented. The first fix was wrong and CI caught it; see *What CI caught* below.
 - [x] `make check` passes.
 
 ## Items
@@ -78,7 +78,7 @@ Option A is 1 line. Do that, and keep the note.
 ## Steps
 
 - [x] Confirm that no test needs `index.db` or an API key. Mark and deselect any that does.
-- [~] Add `.github/workflows/check.yml`. **Not confirmed on a push** — nothing is pushed yet.
+- [x] Add `.github/workflows/check.yml` and confirm it passes on a push. First run failed and found a real bug; second run green.
 - [x] Remove `uv.lock` and the JavaScript entries from `.gitignore`, then commit `uv.lock`.
 - [x] Split the system prompt into a static block and a chunk block, and add `cache_control` to the chunk block.
 - [x] Build the `ChatAnthropic` client once per model name at module scope.
@@ -120,7 +120,19 @@ Median 7,319, so most questions cache. The ones that miss are the cheapest ones,
 
 Two reporting details worth keeping: a successful cache **write** appears under `ephemeral_5m_input_tokens`, not `cache_creation`, which stays 0 — reading only `cache_creation` would have shown a permanent zero. And the static instructions are ~700 tokens alone, far under the minimum, so a second breakpoint there would never have fired.
 
-### What is genuinely unverified
+### What CI caught, on its first ever run
+
+The first workflow execution failed in 17 seconds, on a bug that passes on macOS and fails on Linux.
+
+`check_same_thread=False` lifts Python's same-thread guard but does **not** make a connection safe to share. That depends on how SQLite was compiled: `sqlite3.threadsafety` is 3 (serialized, connection shareable) on this machine and 1 (multi-thread, not shareable) on the Ubuntu runner. Four threads reading concurrently there produced `InterfaceError('bad parameter or other API misuse')` and `IndexError('tuple index out of range')`.
+
+So the concurrency fix in this task was worse than the problem it replaced. The original code failed loudly with `ProgrammingError`. The "fix" silenced that on machines whose SQLite happens to be serialized, and corrupted access everywhere else.
+
+Every statement now goes through `_fetchall` / `_fetchone` / `_exec` / `_executescript` / `_commit`, each taking a reentrant lock, with rows materialised while the lock is held. A structural test walks the AST of `storage.db` and fails if any method touches `self.conn` directly, because no behavioural test can catch this locally — local SQLite is serialized and passes either way.
+
+Second run: green, 168 passed on Linux / Python 3.12.3.
+
+### What was unverified before the push
 
 Asked directly whether credit blocked confirmation of this task, the honest answer is that credit blocked one item and carelessness blocked another.
 
