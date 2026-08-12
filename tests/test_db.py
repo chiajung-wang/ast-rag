@@ -367,3 +367,38 @@ def test_assert_embed_model_allows_index_predating_the_guard(db):
     """An index built before the meta table existed records no model. Failing
     there would break every existing .db on upgrade."""
     db.assert_embed_model("openai/text-embedding-3-small")  # must not raise
+
+
+def test_get_embedding_round_trips(db, chunk_a):
+    """verify_embeddings.py compares stored vectors against fresh ones, so the
+    read path must return what was written."""
+    rowid = db.insert_chunk(chunk_a)
+    vec = [i / 1000 for i in range(EMBEDDING_DIM)]
+    db.insert_embedding(rowid, vec)
+
+    got = db.get_embedding(rowid)
+    assert got is not None and len(got) == EMBEDDING_DIM
+    # stored as float32, so compare with tolerance rather than equality
+    assert all(abs(a - b) < 1e-6 for a, b in zip(vec, got))
+
+
+def test_get_embedding_missing_returns_none(db, chunk_a):
+    rowid = db.insert_chunk(chunk_a)
+    assert db.get_embedding(rowid) is None
+
+
+def test_sample_embedded_chunks_skips_unembedded(db, chunk_a, chunk_b):
+    embedded = db.insert_chunk(chunk_a)
+    db.insert_embedding(embedded, _fake_embedding())
+    db.insert_chunk(chunk_b)  # no embedding
+
+    sample = db.sample_embedded_chunks(10)
+    assert [c.symbol_name for _, c in sample] == ["RunnableSequence"]
+    assert sample[0][0] == embedded
+
+
+def test_sample_embedded_chunks_respects_limit(db):
+    for i in range(5):
+        c = make_chunk("m.py", f"C{i}", "class", None, i + 1, i + 2, None, f"class C{i}: pass")
+        db.insert_embedding(db.insert_chunk(c), _fake_embedding())
+    assert len(db.sample_embedded_chunks(3)) == 3

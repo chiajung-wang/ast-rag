@@ -113,6 +113,8 @@ Requires a single `OPENROUTER_API_KEY`. Copy `.env.example` to `.env` and fill i
 | `AGENT_MODEL` | `anthropic/claude-haiku-4.5` | answering agent |
 | `JUDGE_MODEL` | `anthropic/claude-sonnet-4.6` | eval judge only |
 
+Run `python verify_embeddings.py` after changing the provider or the embedding model. It re-embeds chunks that already have stored vectors and compares them against the index, so it catches the case the name check cannot: same model name, different vectors. Exit 0 means the index is safe to keep.
+
 **On `EMBED_MODEL`:** embeddings from two different models do not share a vector space, so a query embedded by one cannot be compared against an index built by the other. Nothing about that fails on its own — retrieval just returns plausible, wrong neighbours. The index records the model it was built with, and a query under a different `EMBED_MODEL` raises `EmbedModelMismatch` rather than degrading quietly. Re-run `make index` after changing it.
 
 ### macOS note

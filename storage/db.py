@@ -38,6 +38,10 @@ def _serialize(v: list[float]) -> bytes:
     return struct.pack(f"{len(v)}f", *v)
 
 
+def _deserialize(b: bytes) -> list[float]:
+    return list(struct.unpack(f"{len(b) // 4}f", b))
+
+
 class DB:
     def __init__(self, path: str = "index.db"):
         # Streamlit runs one script thread per browser session, and this
@@ -164,6 +168,28 @@ class DB:
             (rowid, _serialize(embedding)),
         )
         self._commit()
+
+    def get_embedding(self, rowid: int) -> list[float] | None:
+        """Read a stored vector back. Used to check that a new embedding
+        provider still lands in the same vector space as the index."""
+        row = self._fetchone(
+            "SELECT embedding FROM vec_chunks WHERE rowid = ?", (rowid,)
+        )
+        return _deserialize(row["embedding"]) if row else None
+
+    def sample_embedded_chunks(self, limit: int) -> list[tuple[int, Chunk]]:
+        """A spread of chunks that have embeddings, as (rowid, chunk)."""
+        rows = self._fetchall(
+            """
+            SELECT c.rowid AS rowid, c.id, c.file_path, c.symbol_name, c.symbol_type,
+                   c.parent_class, c.line_start, c.line_end, c.docstring, c.text,
+                   c.embed_text, c.base_classes
+            FROM chunks c JOIN vec_chunks v ON v.rowid = c.rowid
+            ORDER BY c.rowid LIMIT ?
+            """,
+            (limit,),
+        )
+        return [(r["rowid"], _row_to_chunk(r)) for r in rows]
 
     def vector_search(self, embedding: list[float], k: int = 10) -> list[Chunk]:
         rows = self._fetchall(

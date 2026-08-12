@@ -89,6 +89,7 @@ make check     # run unit tests (pytest tests/ -v)
 
 python ask.py "Where is Runnable defined?"   # CLI agent test
 python query.py "Runnable definition"        # raw retrieval test
+python verify_embeddings.py                  # check provider vectors match the index
 ```
 
 ## Stack
@@ -167,6 +168,8 @@ Current pinned SHA: `1519ed5afbc3bfcc7170b12baa07f1ae7e98edd0` — 181 .py files
 **Provider**: everything goes through OpenRouter via the OpenAI-compatible client (`ChatOpenAI` + `OpenAI`, both with `base_url=provider.BASE_URL`). There is no `anthropic` or `langchain-anthropic` dependency. Provider errors are `openai.APIError` — catching `anthropic.APIError` silently stops handling them.
 
 **Embed model guard**: `indexer/embedder.py` writes `EMBED_MODEL` into the `meta` table; `retrieval/pipeline.py` calls `db.assert_embed_model()` on first use. An index predating the guard records nothing and is allowed through.
+
+**Vector parity**: the name guard cannot catch same-name-different-vectors, which is the risk when swapping provider. `verify_embeddings.py` re-embeds already-stored chunks and cosines them against the index. Threshold 0.9999 — float32 storage alone costs ~1e-7, so a real match never lands near it. Exit 1 means re-index and re-run `make eval-retrieval`.
 
 **Python env**: `.venv` has all deps (`sqlite_vec`, etc). Base anaconda3 env does not. Always use `.venv/bin/python -m pytest` for tests (macOS/Linux); `.venv/Scripts/python -m pytest` on Windows.
 
