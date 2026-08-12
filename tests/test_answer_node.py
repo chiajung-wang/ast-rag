@@ -241,3 +241,42 @@ def test_answer_node_reports_cache_tokens(mock_get_db, mock_anthropic):
     state = AgentState(messages=[HumanMessage("q")], retrieved_chunks=[_make_chunk("X")])
     out = answer_node(state)["messages"][-1]
     assert out.additional_kwargs["cache_read_tokens"] == 4096
+
+
+def test_system_prefix_is_byte_stable_across_tool_rounds():
+    """Caching is a prefix match, so the block must not vary between rounds.
+
+    The API decides whether a hit occurs (it declines below 4096 tokens on
+    Haiku 4.5). Prefix stability is the part this code controls, so that is
+    what gets asserted here.
+    """
+    from agent.answer_node import answer_node
+    seen_systems = []
+
+    tool_call = AIMessage(
+        content="",
+        tool_calls=[{"name": "read_file",
+                     "args": {"path": "runnables/base.py", "line_start": 1, "line_end": 5},
+                     "id": "t1"}],
+    )
+    final = AIMessage(content="Done [runnables/base.py:10-50]")
+
+    model = MagicMock()
+    model.bind_tools.return_value = model
+
+    def record(msgs, *a, **k):
+        seen_systems.append(msgs[0].content)
+        return tool_call if len(seen_systems) == 1 else final
+
+    model.invoke.side_effect = record
+
+    with patch("agent.answer_node.ChatAnthropic", return_value=model), \
+         patch("agent.answer_node._get_db", return_value=_mock_db(True)), \
+         patch("agent.answer_node._read_file", return_value="source"):
+        state = AgentState(messages=[HumanMessage("q")],
+                           retrieved_chunks=[_make_chunk("RunnableSequence")])
+        answer_node(state)
+
+    assert len(seen_systems) == 2, "expected a tool round then a final round"
+    assert seen_systems[0] == seen_systems[1], "system prefix changed between rounds"
+    assert seen_systems[0][0]["cache_control"] == {"type": "ephemeral"}

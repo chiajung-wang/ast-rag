@@ -248,3 +248,52 @@ def test_insert_chunk_refreshes_base_classes_without_new_rowid(db):
     assert second == first
     assert db.has_embedding(first) is True
     assert db.symbol_lookup("C").base_classes == ["Base"]
+
+
+def test_db_is_usable_from_a_second_thread(tmp_path):
+    """Streamlit runs one script thread per browser session, and DB lives in a
+    module-level global. With check_same_thread=True the second session raised
+    ProgrammingError."""
+    import threading
+    path = str(tmp_path / "t.db")
+    db = DB(path)
+    db.insert_chunk(make_chunk("m.py", "C", "class", None, 1, 5, None, "class C: pass"))
+
+    result: dict = {}
+
+    def read():
+        try:
+            result["chunk"] = db.symbol_lookup("C")
+        except Exception as exc:  # noqa: BLE001 - the failure mode under test
+            result["error"] = exc
+
+    t = threading.Thread(target=read)
+    t.start()
+    t.join()
+
+    assert "error" not in result, result.get("error")
+    assert result["chunk"].symbol_name == "C"
+
+
+def test_db_concurrent_reads_from_many_threads(tmp_path):
+    import threading
+    db = DB(str(tmp_path / "t.db"))
+    db.insert_chunk(make_chunk("m.py", "C", "class", None, 1, 5, None, "class C: pass"))
+
+    errors: list = []
+
+    def read():
+        try:
+            for _ in range(20):
+                db.symbol_lookup("C")
+                db.all_symbol_names()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=read) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, errors

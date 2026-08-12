@@ -6,10 +6,10 @@ Four small changes that a reviewer checks in the first 5 minutes: automated test
 
 ## Acceptance Criteria
 
-- [x] GitHub Actions runs `make check` on every push and every pull request.
+- [~] GitHub Actions runs `make check` on every push and every pull request. Workflow written and its command verified locally. **Never executed** — the branch is not pushed, so Actions has not run once.
 - [x] `uv.lock` is tracked in git.
-- [x] The answer node caches the chunk context, and a repeated tool round reads from the cache.
-- [x] The concurrency limit of the Streamlit app is fixed or documented.
+- [~] The answer node caches the chunk context, and a repeated tool round reads from the cache. Prefix stability across rounds is unit-tested, and a cache read was observed on a standalone tool-bound call. **A read inside the real loop was never observed** — credit ran out.
+- [x] The concurrency limit of the Streamlit app is fixed or documented. Covered by two threading tests, added after the first pass shipped the change untested.
 - [x] `make check` passes.
 
 ## Items
@@ -78,7 +78,7 @@ Option A is 1 line. Do that, and keep the note.
 ## Steps
 
 - [x] Confirm that no test needs `index.db` or an API key. Mark and deselect any that does.
-- [x] Add `.github/workflows/check.yml` and confirm it passes on a push.
+- [~] Add `.github/workflows/check.yml`. **Not confirmed on a push** — nothing is pushed yet.
 - [x] Remove `uv.lock` and the JavaScript entries from `.gitignore`, then commit `uv.lock`.
 - [x] Split the system prompt into a static block and a chunk block, and add `cache_control` to the chunk block.
 - [x] Build the `ChatAnthropic` client once per model name at module scope.
@@ -119,6 +119,18 @@ The system prompt is one `cache_control` block. The model client is now built on
 Median 7,319, so most questions cache. The ones that miss are the cheapest ones, which is the right way round. `cache_read_tokens` is now carried on the answer and reported per eval run, so this stays measured rather than assumed.
 
 Two reporting details worth keeping: a successful cache **write** appears under `ephemeral_5m_input_tokens`, not `cache_creation`, which stays 0 — reading only `cache_creation` would have shown a permanent zero. And the static instructions are ~700 tokens alone, far under the minimum, so a second breakpoint there would never have fired.
+
+### What is genuinely unverified
+
+Asked directly whether credit blocked confirmation of this task, the honest answer is that credit blocked one item and carelessness blocked another.
+
+| criterion | state |
+|---|---|
+| `uv.lock` tracked | verified |
+| `make check` passes, including from a clean shell | verified |
+| Concurrency fixed | now verified, by two threading tests written after the first pass ticked the box with no test behind it |
+| Cache read on a repeated tool round | partial: prefix stability unit-tested, cache read seen on a standalone call, never seen inside the real loop |
+| CI runs on push and pull request | **not verified at all.** The branch has never been pushed, so GitHub Actions has never run. Credit is irrelevant to this one. |
 
 ### Blocked
 
