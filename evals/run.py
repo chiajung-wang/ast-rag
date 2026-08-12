@@ -5,20 +5,24 @@ import statistics
 import time
 from datetime import datetime
 from pathlib import Path
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agent.graph import graph
 from evals.judge_prompt import JUDGE_SYSTEM
+import provider
 
-JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "claude-haiku-4-5")
-AGENT_MODEL = os.environ.get("AGENT_MODEL", "claude-haiku-4-5")
+JUDGE_MODEL = provider.judge_model()
+AGENT_MODEL = provider.agent_model()
 
-# USD per million tokens, (input, output). List prices as of 2026-08-11.
+# USD per million tokens, (input, output). OpenRouter passes provider pricing
+# through unchanged, so these match Anthropic list prices as of 2026-08-12.
+# Keys are OpenRouter slugs: a miss here falls back to the Sonnet rate and
+# silently misprices every run, which is the bug task 6.1 fixed.
 _PRICES: dict[str, tuple[float, float]] = {
-    "claude-haiku-4-5": (1.00, 5.00),
-    "claude-sonnet-4-6": (3.00, 15.00),
-    "claude-opus-4-7": (5.00, 25.00),
+    "anthropic/claude-haiku-4.5": (1.00, 5.00),
+    "anthropic/claude-sonnet-4.6": (3.00, 15.00),
+    "anthropic/claude-opus-4.7": (5.00, 25.00),
 }
 
 
@@ -94,7 +98,12 @@ def _judge(
     answer: str,
     max_retries: int = 3,
 ) -> tuple[bool, int, int]:
-    model = ChatAnthropic(model=JUDGE_MODEL, temperature=0)
+    model = ChatOpenAI(
+        model=JUDGE_MODEL,
+        temperature=0,
+        base_url=provider.BASE_URL,
+        api_key=provider.api_key(),
+    )
     payload = {
         "question": question,
         "expected_file_paths": expected_file_paths,
@@ -256,8 +265,8 @@ if __name__ == "__main__":
     results_dir = Path(args.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%m%d-%H%M")
-    agent_slug = AGENT_MODEL.split("claude-")[-1].split("-2")[0]
-    judge_slug = JUDGE_MODEL.split("claude-")[-1].split("-2")[0]
+    agent_slug = AGENT_MODEL.split("/")[-1]
+    judge_slug = JUDGE_MODEL.split("/")[-1]
     # Name the question set in the filename. A dev score and a held-out score
     # are different claims and must not be mistaken for each other on disk.
     set_slug = Path(args.questions).stem.replace("questions-", "").replace("questions", "dev")

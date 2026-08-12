@@ -3,7 +3,8 @@ import math
 from dotenv import load_dotenv
 from openai import OpenAI
 from storage.chunk import Chunk
-from storage.db import DB
+from storage.db import DB, EMBED_MODEL_KEY
+import provider
 
 load_dotenv()
 
@@ -15,19 +16,23 @@ _client: OpenAI | None = None
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI()
+        _client = OpenAI(base_url=provider.BASE_URL, api_key=provider.api_key())
     return _client
 
 
 def _openai_embed(texts: list[str]) -> list[list[float]]:
     response = _get_client().embeddings.create(
-        model="text-embedding-3-small",
+        model=provider.embed_model(),
         input=texts,
     )
     return [item.embedding for item in response.data]
 
 
 def embed_chunks(chunks: list[Chunk], db: DB) -> None:
+    # Record which model produced these vectors so a later query against a
+    # different EMBED_MODEL fails loudly instead of returning wrong neighbours.
+    db.set_meta(EMBED_MODEL_KEY, provider.embed_model())
+
     pairs: list[tuple[Chunk, int]] = []
     for chunk in chunks:
         rowid = db.insert_chunk(chunk)

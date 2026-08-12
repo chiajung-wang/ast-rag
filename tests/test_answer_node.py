@@ -1,7 +1,7 @@
 from unittest.mock import patch, MagicMock
 import pytest
 import httpx
-import anthropic
+import openai
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from storage.chunk import make_chunk
 from agent.state import AgentState
@@ -11,15 +11,18 @@ from agent.answer_node import reset_model_cache
 @pytest.fixture(autouse=True)
 def _clear_model_cache():
     """answer_node caches one client per model for the life of the process.
-    Without this, a patched ChatAnthropic from one test is reused by the next."""
+    Without this, a patched ChatOpenAI from one test is reused by the next."""
     reset_model_cache()
     yield
     reset_model_cache()
 
 
-def _fake_api_error(msg: str = "connection failed") -> anthropic.APIError:
-    req = httpx.Request("GET", "https://api.anthropic.com")
-    return anthropic.APIConnectionError(message=msg, request=req)
+def _fake_api_error(msg: str = "connection failed") -> openai.APIError:
+    """OpenRouter is reached through the OpenAI client, so provider failures
+    arrive as openai.APIError. Catching the wrong exception type here is how
+    the graceful-error path silently regresses to a traceback."""
+    req = httpx.Request("GET", "https://openrouter.ai/api/v1")
+    return openai.APIConnectionError(message=msg, request=req)
 
 
 def _make_chunk(name: str):
@@ -39,7 +42,7 @@ def _mock_db(exists: bool = True):
     return mock_db
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 @patch("agent.answer_node._get_db")
 def test_answer_node_no_tool_calls(mock_get_db, mock_anthropic):
     mock_get_db.return_value = _mock_db(exists=True)
@@ -59,7 +62,7 @@ def test_answer_node_no_tool_calls(mock_get_db, mock_anthropic):
     assert "Answer" in result["messages"][-1].content
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 @patch("agent.answer_node._get_db")
 def test_answer_node_tool_call_executes_read_file(mock_get_db, mock_anthropic):
     mock_get_db.return_value = _mock_db(exists=True)
@@ -90,7 +93,7 @@ def test_answer_node_tool_call_executes_read_file(mock_get_db, mock_anthropic):
     assert len(result["messages"]) == 2
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 @patch("agent.answer_node._get_db")
 def test_answer_node_invalid_citation_stripped(mock_get_db, mock_anthropic):
     mock_get_db.return_value = _mock_db(exists=False)
@@ -109,7 +112,7 @@ def test_answer_node_invalid_citation_stripped(mock_get_db, mock_anthropic):
     assert "could not be verified" in content
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 @patch("agent.answer_node._get_db")
 def test_graph_invoke_returns_messages(mock_get_db, mock_anthropic):
     mock_get_db.return_value = _mock_db(exists=True)
@@ -128,7 +131,7 @@ def test_graph_invoke_returns_messages(mock_get_db, mock_anthropic):
     assert isinstance(result["messages"][-1], AIMessage)
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 @patch("agent.answer_node._get_db")
 def test_answer_node_api_error_returns_graceful_message(mock_get_db, mock_anthropic):
     mock_get_db.return_value = _mock_db(exists=True)
@@ -148,11 +151,11 @@ def test_answer_node_api_error_returns_graceful_message(mock_get_db, mock_anthro
     assert len(result["messages"]) == 2
     last = result["messages"][-1]
     assert isinstance(last, AIMessage)
-    assert "Anthropic API error" in last.content
+    assert "OpenRouter API error" in last.content
     assert "try again" in last.content
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 @patch("agent.answer_node._get_db")
 def test_answer_node_empty_chunks_no_crash(mock_get_db, mock_anthropic):
     mock_get_db.return_value = _mock_db(exists=True)
@@ -191,18 +194,18 @@ def test_system_message_cacheable_even_with_no_chunks():
     assert "(no chunks retrieved)" in block["text"]
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 def test_model_client_is_reused_across_calls(mock_anthropic):
     """Rebuilding the client per round threw away the connection pool."""
     from agent.answer_node import _get_model
     mock_anthropic.return_value = _mock_model([])
-    a = _get_model("claude-haiku-4-5")
-    b = _get_model("claude-haiku-4-5")
+    a = _get_model("anthropic/claude-haiku-4.5")
+    b = _get_model("anthropic/claude-haiku-4.5")
     assert a is b
     assert mock_anthropic.call_count == 1
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 def test_model_cache_separates_tool_bound_from_plain(mock_anthropic):
     """The budget-exhausted path needs a client with no tools bound.
 
@@ -211,21 +214,22 @@ def test_model_cache_separates_tool_bound_from_plain(mock_anthropic):
     """
     from agent.answer_node import _get_model, _MODELS
     mock_anthropic.return_value = _mock_model([])
-    _get_model("claude-haiku-4-5", with_tools=True)
-    _get_model("claude-haiku-4-5", with_tools=False)
-    assert set(_MODELS) == {"claude-haiku-4-5:tools", "claude-haiku-4-5:plain"}
+    _get_model("anthropic/claude-haiku-4.5", with_tools=True)
+    _get_model("anthropic/claude-haiku-4.5", with_tools=False)
+    assert set(_MODELS) == {
+        "anthropic/claude-haiku-4.5:tools", "anthropic/claude-haiku-4.5:plain"}
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 def test_model_cache_separates_models(mock_anthropic):
     from agent.answer_node import _get_model
     mock_anthropic.return_value = _mock_model([])
-    _get_model("claude-haiku-4-5")
-    _get_model("claude-sonnet-4-6")
+    _get_model("anthropic/claude-haiku-4.5")
+    _get_model("anthropic/claude-sonnet-4.6")
     assert mock_anthropic.call_count == 2
 
 
-@patch("agent.answer_node.ChatAnthropic")
+@patch("agent.answer_node.ChatOpenAI")
 @patch("agent.answer_node._get_db")
 def test_answer_node_reports_cache_tokens(mock_get_db, mock_anthropic):
     mock_get_db.return_value = _mock_db(exists=True)
@@ -270,7 +274,7 @@ def test_system_prefix_is_byte_stable_across_tool_rounds():
 
     model.invoke.side_effect = record
 
-    with patch("agent.answer_node.ChatAnthropic", return_value=model), \
+    with patch("agent.answer_node.ChatOpenAI", return_value=model), \
          patch("agent.answer_node._get_db", return_value=_mock_db(True)), \
          patch("agent.answer_node._read_file", return_value="source"):
         state = AgentState(messages=[HumanMessage("q")],

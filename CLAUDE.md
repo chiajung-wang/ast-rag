@@ -96,8 +96,9 @@ python query.py "Runnable definition"        # raw retrieval test
 | Layer | Choice |
 |---|---|
 | Agent | LangGraph (Python) — 2 nodes: `retrieve → answer` |
-| LLM | Claude — model set via `AGENT_MODEL` env var (default: `claude-haiku-4-5`) |
-| Embeddings | OpenAI `text-embedding-3-small` |
+| Provider | **OpenRouter only** — one key (`OPENROUTER_API_KEY`) for chat and embeddings. Config in `provider.py`. |
+| LLM | `AGENT_MODEL`, default `anthropic/claude-haiku-4.5` (OpenRouter slugs use dots: `4.5` not `4-5`) |
+| Embeddings | `EMBED_MODEL`, default `openai/text-embedding-3-small`. Recorded in the `.db`; a mismatched query raises `EmbedModelMismatch`. |
 | Storage | SQLite + `sqlite-vec` (one `.db` file, zero infrastructure) |
 | Parser | Python `ast` stdlib — function, class, and method granularity |
 | BM25 | `rank-bm25` with camelCase expansion |
@@ -162,6 +163,10 @@ Current pinned SHA: `1519ed5afbc3bfcc7170b12baa07f1ae7e98edd0` — 181 .py files
 **sqlite-vec KNN syntax**: `WHERE embedding MATCH ? AND k = ?` — no LIMIT clause. Using LIMIT causes `OperationalError`. See `storage/db.py:vector_search`.
 
 **Embed text truncation**: `indexer/embedder.py` truncates embed_text to `MAX_CHARS = 24_000` chars before sending to OpenAI to stay under 8192-token limit.
+
+**Provider**: everything goes through OpenRouter via the OpenAI-compatible client (`ChatOpenAI` + `OpenAI`, both with `base_url=provider.BASE_URL`). There is no `anthropic` or `langchain-anthropic` dependency. Provider errors are `openai.APIError` — catching `anthropic.APIError` silently stops handling them.
+
+**Embed model guard**: `indexer/embedder.py` writes `EMBED_MODEL` into the `meta` table; `retrieval/pipeline.py` calls `db.assert_embed_model()` on first use. An index predating the guard records nothing and is allowed through.
 
 **Python env**: `.venv` has all deps (`sqlite_vec`, etc). Base anaconda3 env does not. Always use `.venv/bin/python -m pytest` for tests (macOS/Linux); `.venv/Scripts/python -m pytest` on Windows.
 

@@ -30,6 +30,16 @@ The labels must come from the langchain-core source, not from the current retrie
 
 Decision: who writes them, and whether an agent may draft them for human review.
 
+### A5. Dev ablation is stale relative to the dev set — BLOCKED on credit
+
+Found while switching to OpenRouter. Task 6.4 added 12 dev questions (q35–q46) but never re-ran the dev ablation, so every dev column published in `README.md`, `CLAUDE.md` and `task-6-3.md` is measured on **33** questions while the dev set now has **45** graded. A partial re-run already shows movement: BM25 recall@5 is 42.2% over 45 questions against the 39.4% published for 33.
+
+The 12 new questions are not in `evals/.embedding_cache.json`, so refreshing needs embedding calls — cents, but it needs a key.
+
+The held-out numbers are unaffected: all 15 are cached and reproduce exactly.
+
+To close: `make eval-retrieval` and update the dev column in the three places above.
+
 ### A3. Judge validation sample — BLOCKED on credit and on owner time
 
 Task 6.7 needs 40 hand-labeled `(question, answer)` pairs to compute agreement with the LLM judge. The labeler must not see the judge verdict first.

@@ -65,7 +65,7 @@ def test_run_writes_results_md(tmp_path):
     )
 
     with patch("evals.run.graph", mock_graph), \
-         patch("evals.run.ChatAnthropic", return_value=mock_judge_model):
+         patch("evals.run.ChatOpenAI", return_value=mock_judge_model):
         run(str(questions_path), str(results_path), n_runs=1)
 
     content = results_path.read_text(encoding="utf-8")
@@ -105,7 +105,7 @@ def test_run_skips_meta_lines(tmp_path):
     )
 
     with patch("evals.run.graph", mock_graph), \
-         patch("evals.run.ChatAnthropic", return_value=mock_judge_model):
+         patch("evals.run.ChatOpenAI", return_value=mock_judge_model):
         run(str(questions_path), str(results_path), n_runs=1)
 
     assert mock_graph.invoke.call_count == 1
@@ -130,14 +130,14 @@ def test_format_results_md_structure():
 
 
 def test_compute_cost_haiku():
-    # haiku-4-5 list price: $1.00 in / $5.00 out per MTok
-    cost = compute_cost("claude-haiku-4-5", input_tokens=1_000_000, output_tokens=1_000_000)
+    # haiku-4.5 list price: $1.00 in / $5.00 out per MTok
+    cost = compute_cost("anthropic/claude-haiku-4.5", input_tokens=1_000_000, output_tokens=1_000_000)
     assert abs(cost - 6.00) < 0.01
 
 
 def test_compute_cost_opus():
-    # opus-4-7 list price: $5.00 in / $25.00 out per MTok
-    cost = compute_cost("claude-opus-4-7", input_tokens=1_000_000, output_tokens=1_000_000)
+    # opus-4.7 list price: $5.00 in / $25.00 out per MTok
+    cost = compute_cost("anthropic/claude-opus-4.7", input_tokens=1_000_000, output_tokens=1_000_000)
     assert abs(cost - 30.00) < 0.01
 
 

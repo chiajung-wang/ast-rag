@@ -12,7 +12,7 @@ composition primitive — created when you chain runnables with the `|` operator
 
 ## How it works
 
-1. **Index** — `langchain-core` source is parsed with Python's `ast` module into chunks (one per function, class, and method). Chunks are embedded with OpenAI `text-embedding-3-small` and stored in SQLite with `sqlite-vec`.
+1. **Index** — `langchain-core` source is parsed with Python's `ast` module into chunks (one per function, class, and method). Chunks are embedded with `openai/text-embedding-3-small` via OpenRouter and stored in SQLite with `sqlite-vec`.
 2. **Retrieve** — queries run hybrid BM25 + dense vector search, merged via reciprocal rank fusion into top-5 results.
 3. **Answer** — a 2-node LangGraph agent (Claude Haiku 4.5 by default) generates answers with `[file:line_start-line_end]` citation markers, validated against the index before returning.
 4. **UI** — Streamlit chat interface with expandable citation blocks showing source lines and GitHub permalinks.
@@ -30,7 +30,7 @@ Method embed text is prefixed with `"ClassName.method_name: "` before indexing s
 Each query runs two searches:
 
 - **BM25** — tokenizer expands camelCase and snake_case identifiers (`RunnableSequence` → `["runnable", "sequence", "runnablesequence"]`) so symbol names match even when the query uses different casing or word order. Costs ~1 ms per query over the in-memory index.
-- **Dense** — OpenAI `text-embedding-3-small` cosine similarity over all 2414 chunk embeddings via `sqlite-vec`. The embedding request dominates query latency at ~300 ms.
+- **Dense** — `openai/text-embedding-3-small` cosine similarity over all 2414 chunk embeddings via `sqlite-vec`. The embedding request dominates query latency at ~300 ms.
 
 The two run in sequence. Overlapping them on a thread would hide under 1% of the wall clock, so it is not worth the machinery.
 
@@ -97,14 +97,23 @@ Negative-tier questions cap at 1 (no file path check — model must correctly sa
 # Install dependencies
 make install
 
-# Index langchain-core (one-time, ~$0.50 in OpenAI API calls)
+# Index langchain-core (one-time, ~$0.50 in embedding calls)
 make index
 
 # Launch the UI
 make run
 ```
 
-Requires `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` in your environment. Set `AGENT_MODEL` to override the default LLM (default: `claude-haiku-4-5`).
+Requires a single `OPENROUTER_API_KEY`. Copy `.env.example` to `.env` and fill it in — OpenRouter serves both the chat models and the embeddings, so there is one key and one bill.
+
+| var | default | notes |
+|---|---|---|
+| `OPENROUTER_API_KEY` | — | required, https://openrouter.ai/keys |
+| `EMBED_MODEL` | `openai/text-embedding-3-small` | **changing this invalidates the index** — see below |
+| `AGENT_MODEL` | `anthropic/claude-haiku-4.5` | answering agent |
+| `JUDGE_MODEL` | `anthropic/claude-sonnet-4.6` | eval judge only |
+
+**On `EMBED_MODEL`:** embeddings from two different models do not share a vector space, so a query embedded by one cannot be compared against an index built by the other. Nothing about that fails on its own — retrieval just returns plausible, wrong neighbours. The index records the model it was built with, and a query under a different `EMBED_MODEL` raises `EmbedModelMismatch` rather than degrading quietly. Re-run `make index` after changing it.
 
 ### macOS note
 
@@ -140,7 +149,7 @@ make eval             # 34-question end-to-end eval (LLM agent + LLM judge)
 make eval-retrieval   # retriever-only ablation: recall@k, MRR, nDCG@5 (no LLM)
 ```
 
-`make eval-retrieval` needs no Anthropic key and caches its query embeddings, so it runs in seconds and costs nothing after the first pass. Use it to check a retrieval change before spending a full eval.
+`make eval-retrieval` makes no chat-model calls and caches its query embeddings, so it runs in seconds and costs nothing after the first pass. Use it to check a retrieval change before spending a full eval.
 
 ## CLI usage
 
@@ -190,8 +199,9 @@ The held-out set *has* been scored on retrieval, which is free — see the ablat
 | Layer | Choice |
 |---|---|
 | Agent | LangGraph — 2 nodes: `retrieve → answer` |
-| LLM | Claude (configurable via `AGENT_MODEL`, default `claude-haiku-4-5`) |
-| Embeddings | OpenAI `text-embedding-3-small` |
+| Provider | OpenRouter — one key for chat and embeddings |
+| LLM | `AGENT_MODEL`, default `anthropic/claude-haiku-4.5` |
+| Embeddings | `EMBED_MODEL`, default `openai/text-embedding-3-small` |
 | Storage | SQLite + `sqlite-vec` |
 | BM25 | `rank-bm25` |
 | UI | Streamlit |

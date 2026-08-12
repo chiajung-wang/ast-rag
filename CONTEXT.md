@@ -50,7 +50,7 @@ Heuristic pre-check: regex extracts CamelCase / `snake_case` / `ALL_CAPS` tokens
 LangGraph `TypedDict` with two fields: `messages: list[BaseMessage]` (LangChain message history) and `retrieved_chunks: list[Chunk]`. `retrieve` node writes chunks once (replace reducer); `answer` node reads them. Explicit field — not inferred from message history — so citation validator and eval runner can inspect chunks directly.
 
 ## Answer Node
-Runs a tool-call loop (`MAX_TOOL_ROUNDS = 8`). Each round: invoke LLM (model from `AGENT_MODEL` env var, default `claude-haiku-4-5`) → if `AIMessage` contains tool calls → execute tools → feed `ToolMessage` back → repeat. Stops when model returns a plain text response or 8 rounds are exhausted. Budget exhausted → forced final answer + `budget_exhausted=True` in `AIMessage.additional_kwargs`. Tools: `get_class_outline(class_name)` (own + inherited method signatures, external bases, direct subclasses — one call maps a class) and `read_file(path, line_start, line_end)`. Retrieved chunks injected into system prompt alongside citation rule; user message is the raw query. Tool trace `(round, tool_name, args)` accumulated in `additional_kwargs["tool_trace"]`.
+Runs a tool-call loop (`MAX_TOOL_ROUNDS = 8`). Each round: invoke LLM (model from `AGENT_MODEL`, default `anthropic/claude-haiku-4.5`, via OpenRouter) → if `AIMessage` contains tool calls → execute tools → feed `ToolMessage` back → repeat. Stops when model returns a plain text response or 8 rounds are exhausted. Budget exhausted → forced final answer + `budget_exhausted=True` in `AIMessage.additional_kwargs`. Tools: `get_class_outline(class_name)` (own + inherited method signatures, external bases, direct subclasses — one call maps a class) and `read_file(path, line_start, line_end)`. Retrieved chunks injected into system prompt alongside citation rule; user message is the raw query. Tool trace `(round, tool_name, args)` accumulated in `additional_kwargs["tool_trace"]`.
 
 ## Citation Validator
 Parses `[path:start-end]` markers from answer text. Validates each via `db.chunk_exists_at(path, start, end)`. Strips invalid markers; appends `"*N citation(s) could not be verified and were removed.*"` footnote at end if any were stripped.
@@ -72,3 +72,15 @@ Two sets: dev (`evals/questions.jsonl`, 50 questions, prompt tuned against the o
 **Scoping**: methods are matched by `parent_class` *and* `file_path`. Matching on name alone merged same-named classes from different modules (`NoLock`, `RunInfo`, `Tee`, `ToolCall`, `ToolCallChunk` each appear twice).
 
 **Base names**: `indexer/chunker.py:_base_names` records simple names only. `mod.Foo` stores `Foo`, `Generic[T]` stores `Generic`. `base_classes` is excluded from the chunk hash, so `insert_chunk` upserts the column and a re-index fills it without invalidating an embedding.
+
+## Provider
+OpenRouter is the only provider. One key, `OPENROUTER_API_KEY`, covers chat and embeddings. Base URL and model defaults live in `provider.py`.
+
+Chat uses `ChatOpenAI` and embeddings use `OpenAI`, both pointed at `https://openrouter.ai/api/v1`. There is no Anthropic SDK dependency. Provider failures surface as `openai.APIError`.
+
+**Model slugs** use dots, not dashes: `anthropic/claude-haiku-4.5`. A wrong slug 404s at request time and also misses the eval price table, which silently falls back to the Sonnet rate.
+
+## Embed Model Guard
+Embeddings from two models do not share a vector space. A query embedded by model A against an index built by model B returns plausible, wrong neighbours and raises nothing.
+
+`indexer/embedder.py` writes the active `EMBED_MODEL` into a `meta` table at index time. `retrieval/pipeline.py` calls `db.assert_embed_model()` when it first opens the index, raising `EmbedModelMismatch` on disagreement. An index built before the guard existed records no model and is allowed through, so upgrading does not break an existing `.db`.

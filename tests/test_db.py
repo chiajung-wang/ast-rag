@@ -330,3 +330,40 @@ def test_no_query_bypasses_the_lock():
                 offenders.append(f"{method.name} -> self.conn.{node.attr}")
 
     assert not offenders, "statements bypassing the lock: " + ", ".join(offenders)
+
+
+# ── embedding-model guard ────────────────────────────────────────────────────
+
+def test_embed_model_is_recorded_and_read_back(db):
+    from storage.db import EMBED_MODEL_KEY
+    db.set_meta(EMBED_MODEL_KEY, "openai/text-embedding-3-small")
+    assert db.get_meta(EMBED_MODEL_KEY) == "openai/text-embedding-3-small"
+
+
+def test_set_meta_overwrites(db):
+    db.set_meta("k", "one")
+    db.set_meta("k", "two")
+    assert db.get_meta("k") == "two"
+
+
+def test_assert_embed_model_passes_on_match(db):
+    from storage.db import EMBED_MODEL_KEY
+    db.set_meta(EMBED_MODEL_KEY, "openai/text-embedding-3-small")
+    db.assert_embed_model("openai/text-embedding-3-small")  # must not raise
+
+
+def test_assert_embed_model_raises_on_mismatch(db):
+    """Two models do not share a vector space. Without this the query returns
+    plausible, wrong neighbours and nothing complains."""
+    from storage.db import EMBED_MODEL_KEY, EmbedModelMismatch
+    db.set_meta(EMBED_MODEL_KEY, "openai/text-embedding-3-small")
+    with pytest.raises(EmbedModelMismatch) as exc:
+        db.assert_embed_model("openai/text-embedding-3-large")
+    assert "text-embedding-3-small" in str(exc.value)
+    assert "make index" in str(exc.value)
+
+
+def test_assert_embed_model_allows_index_predating_the_guard(db):
+    """An index built before the meta table existed records no model. Failing
+    there would break every existing .db on upgrade."""
+    db.assert_embed_model("openai/text-embedding-3-small")  # must not raise

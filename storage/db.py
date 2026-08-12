@@ -8,6 +8,11 @@ from storage.chunk import Chunk, make_chunk
 
 EMBEDDING_DIM = 1536
 MAX_MRO_DEPTH = 3
+EMBED_MODEL_KEY = "embed_model"
+
+
+class EmbedModelMismatch(RuntimeError):
+    """Raised when the index and the configured embedding model disagree."""
 
 
 @dataclass
@@ -100,6 +105,10 @@ class DB:
                 ON chunks(lower(symbol_name));
             CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
                 embedding FLOAT[{EMBEDDING_DIM}]
+            );
+            CREATE TABLE IF NOT EXISTS meta (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             );
         """)
         # CREATE TABLE IF NOT EXISTS will not add a column to an index built
@@ -209,6 +218,41 @@ class DB:
     def all_symbol_names(self) -> set[str]:
         rows = self._fetchall("SELECT symbol_name FROM chunks")
         return {r["symbol_name"] for r in rows}
+
+    # ── embedding-model guard ─────────────────────────────────────────────
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._fetchone("SELECT value FROM meta WHERE key = ?", (key,))
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        self._exec(
+            "INSERT INTO meta(key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        self._commit()
+
+    def assert_embed_model(self, model: str) -> None:
+        """Refuse to query an index built by a different embedding model.
+
+        Two models do not share a vector space, so a mismatch does not raise
+        anything on its own — it silently returns plausible, wrong neighbours.
+        The index records its model, and this fails loudly instead.
+
+        An index built before the column existed has no recorded model. That
+        is allowed through, because the alternative is breaking every existing
+        .db on upgrade.
+        """
+        indexed = self.get_meta(EMBED_MODEL_KEY)
+        if indexed is None or indexed == model:
+            return
+        raise EmbedModelMismatch(
+            f"Index was built with embedding model {indexed!r} but the current "
+            f"EMBED_MODEL is {model!r}. Embeddings from different models are "
+            f"not comparable. Run `make index` to rebuild, or set EMBED_MODEL "
+            f"back to {indexed!r}."
+        )
 
     def _find_class(self, class_name: str) -> Chunk | None:
         """Resolve a class by name. Ties break on file_path, then line_start."""

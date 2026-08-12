@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
-import anthropic
-from langchain_anthropic import ChatAnthropic
+import openai
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool
 from storage.db import DB
@@ -9,6 +9,7 @@ from retrieval.pipeline import read_file as _read_file
 from agent.state import AgentState
 from agent.citations import validate_citations
 from indexer.corpus_config import DB_PATH
+import provider
 
 MAX_TOOL_ROUNDS = 8
 
@@ -70,15 +71,20 @@ def read_file(path: str, line_start: int, line_end: int) -> str:
     return _read_file(path, line_start, line_end)
 
 
-_MODELS: dict[str, ChatAnthropic] = {}
+_MODELS: dict[str, ChatOpenAI] = {}
 
 
-def _get_model(model_name: str, *, with_tools: bool = True) -> ChatAnthropic:
+def _get_model(model_name: str, *, with_tools: bool = True) -> ChatOpenAI:
     """One client per (model, tool-binding). Rebuilding it per call threw away
     the connection pool and cost a little latency on every round."""
     key = f"{model_name}:{'tools' if with_tools else 'plain'}"
     if key not in _MODELS:
-        model = ChatAnthropic(model=model_name, temperature=0)
+        model = ChatOpenAI(
+            model=model_name,
+            temperature=0,
+            base_url=provider.BASE_URL,
+            api_key=provider.api_key(),
+        )
         if with_tools:
             model = model.bind_tools([get_class_outline, read_file])
         _MODELS[key] = model
@@ -172,7 +178,7 @@ def _build_system_message(chunks) -> SystemMessage:
 
 
 def answer_node(state: AgentState) -> dict:
-    model_name = os.environ.get("AGENT_MODEL", "claude-haiku-4-5")
+    model_name = provider.agent_model()
     model = _get_model(model_name)
     system = _build_system_message(state["retrieved_chunks"])
     messages: list = [system] + list(state["messages"])
@@ -192,12 +198,19 @@ def answer_node(state: AgentState) -> dict:
         total_output_tokens += u.get("output_tokens", 0)
         # Cache hits are the only evidence that the breakpoint actually took.
         # A prefix under the model's minimum caches silently not at all.
+        # Key names differ by path. langchain-openai surfaces OpenRouter's
+        # usage.prompt_tokens_details as input_token_details, where a cache hit
+        # is "cache_read"; OpenRouter itself names it "cached_tokens". Read
+        # every spelling so the figure is not silently always zero -- that
+        # exact trap cost a round of debugging on the direct-Anthropic path.
         details = u.get("input_token_details") or {}
-        total_cache_read += details.get("cache_read", 0)
-        # A successful write lands in ephemeral_5m_input_tokens; cache_creation
-        # stays 0. Read both so the figure is not silently always zero.
+        total_cache_read += (
+            details.get("cache_read", 0)
+            or details.get("cached_tokens", 0)
+        )
         total_cache_write += (
             details.get("cache_creation", 0)
+            or details.get("cache_write_tokens", 0)
             or details.get("ephemeral_5m_input_tokens", 0)
         )
 
@@ -223,11 +236,12 @@ def answer_node(state: AgentState) -> dict:
             )))
             response = _get_model(model_name, with_tools=False).invoke(messages)
             _add_usage(response)
-    except anthropic.APIError as e:
+    except openai.APIError as e:
         return {"messages": list(state["messages"]) + [
             AIMessage(content=(
-                "Anthropic API error — try again. "
-                f"If it persists, check your API key and rate limits. ({e})"
+                "OpenRouter API error — try again. "
+                f"If it persists, check your API key, credit balance and rate "
+                f"limits at https://openrouter.ai. ({e})"
             ))
         ]}
 

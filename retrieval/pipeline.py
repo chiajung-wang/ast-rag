@@ -8,6 +8,7 @@ from storage.db import DB
 from retrieval.bm25_index import BM25Index
 from retrieval.rrf import rrf
 from indexer.corpus_config import CLONE_DIR, CORPUS_SUBPATH, DB_PATH
+import provider
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ def _get_db() -> DB:
     global _db
     if _db is None:
         _db = DB(DB_PATH)
+        _db.assert_embed_model(provider.embed_model())
     return _db
 
 
@@ -39,13 +41,13 @@ def _get_bm25() -> BM25Index:
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI()
+        _client = OpenAI(base_url=provider.BASE_URL, api_key=provider.api_key())
     return _client
 
 
 def _embed_query(query: str) -> list[float]:
     response = _get_client().embeddings.create(
-        model="text-embedding-3-small",
+        model=provider.embed_model(),
         input=[query[:24_000]],
     )
     return response.data[0].embedding

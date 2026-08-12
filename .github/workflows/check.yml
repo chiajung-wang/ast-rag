@@ -21,6 +21,5 @@ jobs:
       # so a test that quietly starts depending on either fails here first.
       - name: Run tests
         env:
-          OPENAI_API_KEY: ""
-          ANTHROPIC_API_KEY: ""
+          OPENROUTER_API_KEY: ""
         run: uv run pytest tests/ -v
