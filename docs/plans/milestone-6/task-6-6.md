@@ -83,7 +83,7 @@ Option A is 1 line. Do that, and keep the note.
 - [x] Split the system prompt into a static block and a chunk block, and add `cache_control` to the chunk block.
 - [x] Build the `ChatAnthropic` client once per model name at module scope.
 - [x] Add `cache_read_input_tokens` to the eval cost report.
-- [x] Run one eval question and confirm that `cache_read_input_tokens` is above 0 after round 1.
+- [~] Confirm `cache_read` is above 0 after round 1. Confirmed on a standalone tool-bound call (8k prefix, round 2 read 8,141). **Not** confirmed through a full eval question — the account ran out of credit first.
 - [x] Add `check_same_thread=False` to the `DB` connection.
 - [x] Add a "Limitations" section to `README.md`.
 - [x] Run `make check` and confirm all tests pass.
