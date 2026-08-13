@@ -191,12 +191,13 @@ Two question sets:
 
 Tier counts are now 5 or more per tier on both sets. The original dev set had 1 question each in definition, usage, cross-file, and negative.
 
-**End-to-end baseline: 63 / 67 (94%)** — haiku-4-5 agent, sonnet-4-6 judge, **n=1**, on the original 34 dev questions. Two caveats stand:
+**End-to-end dev baseline: 91.0 / 95 (95.8%)** — dev set (50 q), n=3, `anthropic/claude-sonnet-5` agent+judge via OpenRouter, run 2026-08-12, $9.96. Replaces an earlier 63/67 (94%) figure that was n=1, haiku-4-5, direct Anthropic, and only 34 questions — not directly comparable on any axis.
 
-1. **n=1, so there is no variance figure.** The runner defaults to n=3 and reports a median and a variance. Run `make eval` to regenerate.
-2. **It is a dev score.** The prompt was tuned against those questions, so it does not predict behavior on an unseen one. `make eval-test` produces the held-out score; it has not been run yet, because it spends API budget.
+**End-to-end held-out: 32 / 32 (100%)** — held-out set (17 q), n=1, same models, run 2026-08-12, $1.00. This is the score that matters more: written after the prompt froze, never used for tuning.
 
-The held-out set *has* been scored on retrieval, which is free — see the ablation above. Results go to `evals/results/results-<timestamp>-<set>-<agent>-<judge>.md`, with the question set named in the filename so a dev score and a held-out score cannot be confused.
+Investigating the dev run's non-perfect rows found two bugs, both fixed: a silent crash where a non-`openai.APIError` SDK exception escaped the agent's error handling uncaught (now caught generically), and 3 grading-criteria bugs in the original 34-question set that demanded facts absent from the indexed corpus, contradicting the system prompt's own citation rule (now corrected). A clean re-run reflecting both fixes has not been done — see `docs/plans/milestone-6/open-questions.md` A1 for the honest accounting.
+
+Results go to `evals/results/results-<timestamp>-<set>-<agent>-<judge>.md`, with the question set named in the filename so a dev score and a held-out score cannot be confused.
 
 ## Stack
 

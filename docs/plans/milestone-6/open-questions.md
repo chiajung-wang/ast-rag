@@ -12,15 +12,18 @@ Status key: **OPEN** — needs a decision. **BLOCKED** — needs data first. **P
 
 > **The Anthropic account has no credit.** Verified 2026-08-12: any agent or judge call returns `400 invalid_request_error — Your credit balance is too low to access the Anthropic API`. Every item in this group that spends Anthropic tokens (A1, A3, A4) is blocked on topping up, not on deciding to spend. Measured cost is small: ~$0.62 for a held-out n=1 run, ~$1.82 for dev n=1, ~$5.46 for dev n=3. OpenAI is unaffected, so `make eval-retrieval` still runs.
 
-### A1. Re-run the eval at n=3 — BLOCKED on credit
+### A1. Re-run the eval at n=3 — PARTIALLY CLOSED, one open decision
 
-`README.md` publishes 63/67 at n=1. The runner defaults to n=3 and reports a median and a variance. A single sample carries no variance figure, so the headline number is the weakest form of the eval that the code supports.
+Run 2026-08-12, dev set (50 questions, 45×2 + 5 negative×1 = 95 max), `anthropic/claude-sonnet-5` agent+judge via OpenRouter, n=3: **91.0 / 95 (95.8%)**, $9.96 ($8.74 agent + $1.21 judge). Replaces the old 63/67 (94%, n=1, haiku-4-5, direct Anthropic, 34 questions) — not a fair comparison to begin with, since provider, model, and question count all changed.
 
-Cost: 34 questions, 3 runs, one agent call and one judge call per run. Task 6.1 corrected the price table, so the figure the runner prints is now real.
+Investigating the 4 non-perfect rows found two unrelated bugs, both now fixed and independently re-verified (see the `fix(agent)` and `fix(eval)` commits, 2026-08-13):
 
-Decision: top up and run, or keep the n=1 number with its stated caveat. Task 6.2 left the caveat in place.
+- **q20** — not a grading issue. Run 2 was a silent crash: `score=0 agent_cost=$0.00`, no message. `agent/answer_node.py` only caught `openai.APIError`; a `json.JSONDecodeError` from the SDK's own response parsing escaped uncaught. Fixed by broadening the catch. This does **not** retroactively make q20 a clean pass — the underlying cause (the model occasionally emitting malformed tool-call JSON) still happens, and the fix only ensures it degrades to a graceful message instead of a $0 zombie result. q20's median=1 stands as a real, measured flakiness score.
+- **q28, q29, q30** — genuine eval-authoring bugs, predating task 6.4. Each `description_must_include` demanded a fact absent from the indexed corpus entirely (grep-verified), which the system prompt's own citation rule forbids the agent from stating. Fixed in `evals/questions.jsonl`. Each independently re-confirmed 2/2 post-fix (n=1, ~$0.24 total).
 
-This also gates the regression baseline in task 6.7, which cannot commit a threshold it has never measured, and the accuracy check in task 6.5, which needs a held-out score before and after the prompt hack was removed.
+**What's not done:** a clean n=3 re-run of the full 50-question set with both fixes in place. The 91.0/95 figure above still reflects the pre-fix criteria on q28/q29/q30 (each capped at 1/2 by a bug, now fixed) and the pre-fix crash handling on q20 (unrelated to its true score). A defensible read: 91.0/95 plus the +3 from q28/q29/q30's fix ≈ **94/95 (~99%)**, but that mixes an n=3 aggregate with n=1 spot-checks and isn't a number to publish as-is.
+
+Decision: spend another ~$10 for one clean n=3 run to get a single, methodologically consistent headline number, or publish 91.0/95 with this note attached and let a future run supersede it. Either way, this now also unblocks the 6.7 regression baseline and the 6.5 accuracy check, which were gated on A1 landing at all.
 
 ### A2. Who writes the labels and the held-out questions — OPEN
 
