@@ -95,13 +95,13 @@ The recall@5 to recall@10 gap bounds what reranking could recover. It is zero on
 
 Every chunk a reranker could promote is already in the top 5. This is the one conclusion from 6.3 that held-out did **not** disturb, and it holds for plain RRF on held-out too (93.3% at both cutoffs).
 
-### B3. Cost of removing the prompt hack — BLOCKED on 6.4 and 6.5
+### B3. Cost of removing the prompt hack — BLOCKED on A1
 
-Task 6.5 deletes the langchain-core naming rules from the system prompt. Task 6.5 requires the held-out score to hold steady.
+Task 6.5 deleted the langchain-core naming rules from the system prompt and left the accuracy check to A1 by design (see the task 6.5 commit body).
 
-If the score drops, the outline tool is still missing something that the hack supplied. The rule is: find the gap in the tool. Do not put the class names back.
+Held-out end-to-end scored 32/32 (100%, n=1) after the hack was removed, so the score did not drop. But no same-model, same-provider run with the hack still in place exists to compare against — the last pre-removal number is the old haiku/direct-Anthropic baseline, which A1 already rules out as not a fair comparison. Without that controlled pair, "held steady" is a good sign, not a closed answer.
 
-Decision if it drops: what the tool still lacks, and whether that is worth another task.
+If A1's clean re-run also holds steady, treat this as answered. If it drops, find what the outline tool still lacks. Do not put the class names back.
 
 ---
 
@@ -190,11 +190,11 @@ Every chunk carries a `docstring` column. `get_class_outline` prints the first l
 
 A docstring is the highest-signal text in a chunk for a natural-language question. Worth an experiment once task 6.3 can measure a retrieval change.
 
-### C6. Prompt caching may not clear the minimum prefix — BLOCKED on 6.6
+### C6. Prompt caching may not clear the minimum prefix — CLOSED, no fallback built
 
-Task 6.6 adds `cache_control` to the chunk block in the system prompt. The minimum cacheable prefix depends on the model, and Haiku 4.5 needs 4096 tokens. Five chunks usually clear that. A short retrieval may not, and the block then fails to cache with no error.
+Task 6.6 added `cache_control` to the chunk block in the system prompt and started reporting `cache_read_tokens` per run, so the risk is measured, not assumed.
 
-Task 6.6 reports `cache_read_input_tokens` so the answer is measured. Decide the fallback after seeing the number.
+Measured over 5 sample questions (`agent/answer_node.py:_build_system_message` docstring, also `README.md`): the block runs 3,395 to 29,231 tokens, median 7,319. Haiku 4.5's cache floor is 4096 tokens, so most questions clear it and small-chunk questions do not. Decision made in the same task: no fallback, because the questions that miss the threshold are the cheap ones anyway.
 
 ---
 
@@ -206,22 +206,20 @@ The index pins `1519ed5a`. langchain-core keeps moving. The pin gives reproducib
 
 Open: when to re-pin, who checks that the eval answers still hold at a new SHA, and whether a stale pin reads as care or as neglect. Note that the eval questions encode file paths, so a re-pin can invalidate questions.
 
-### D2. Deployment and concurrency — OPEN
+### D2. Deployment and concurrency — OPEN, narrower than before
 
-`README.md` now records that a second concurrent Streamlit session raises `ProgrammingError`. Task 6.6 makes the connection thread-safe for reads.
+Task 6.6 fixed the concurrency bug this item used to describe: `DB` now guards its shared connection with an `RLock` (`storage/db.py`), and `README.md` records that a second Streamlit session no longer raises. That part is closed.
 
-Open: whether a hosted demo is wanted. A hosted demo needs an API key budget, rate limiting, and abuse controls. None of that is in scope today.
+Still open: whether a hosted demo is wanted. A hosted demo needs an API key budget, rate limiting, and abuse controls. None of that is in scope today.
 
-### D3. Which numbers to quote outside the repo — OPEN
+### D3. Which numbers to quote outside the repo — OPEN, numbers now exist
 
-After 6.3, 6.4, and 6.7 there will be several: end-to-end dev score, end-to-end held-out score, recall@5, MRR, the ablation delta, citation precision, and judge agreement.
+Tasks 6.3, 6.4, and 6.7 are done, so the full set exists now: end-to-end dev score, end-to-end held-out score, recall@5, MRR, the ablation delta, citation precision, and judge agreement.
 
-The held-out score and the ablation delta are the two that survive scrutiny. The dev score alone invites the question that task 6.4 exists to answer.
+The held-out score and the ablation delta are the two that survive scrutiny. The dev score alone invites the question that task 6.4 answered (see B1/B1b) — do not quote it without that context.
 
-Decide once the numbers exist. Do not quote a number before its task lands.
+Still undecided: which subset goes in a resume, README badge, or other external summary.
 
-### D4. `make` targets assume an activated venv — OPEN
+### D4. `make` targets assume an activated venv — CLOSED
 
-Every Makefile target calls bare `python`, so `make check` fails unless the caller activated `.venv` first. Task 6.6 notes it beside the CI work, because `uv run` sidesteps it in CI while a local developer still hits it.
-
-Decision: change the targets to `uv run python`, or state the activation step in `README.md`.
+Task 6.6 fixed this. `Makefile` now defines `PY := uv run python`, falling back to bare `python` only when `uv` is absent, and every target uses `$(PY)`. No activation step needed.

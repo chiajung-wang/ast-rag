@@ -40,9 +40,9 @@
 | 6.6 | Repo hygiene | `.github/workflows/`, `.gitignore`, `storage/db.py`, `agent/answer_node.py` | ~2h | **done** |
 | 6.7 | Eval instrumentation | `evals/run.py`, `evals/judge_validation.py` (new) | ~4h | done |
 
-## Out of scope — see `open-questions.md`
+## Out of scope — see `../open-questions/milestone-6.md`
 
-`open-questions.md` in this folder holds the decisions that this milestone does not make. It covers 4 items that need the owner's budget or time, 4 that turn on data from tasks 6.3 and 6.4, 7 measured defects that milestone 6 leaves alone on purpose, and 4 project-level questions.
+`docs/plans/open-questions/milestone-6.md` holds the decisions that this milestone does not make. It covers 4 items that need the owner's budget or time, 4 that turn on data from tasks 6.3 and 6.4, 7 measured defects that milestone 6 leaves alone on purpose, and 4 project-level questions.
 
 **The Anthropic account has no credit as of 2026-08-12.** A1, A3 and A4 are blocked on topping it up rather than on any decision.
 
