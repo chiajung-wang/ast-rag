@@ -259,6 +259,24 @@ def answer_node(state: AgentState) -> dict:
                 f"limits at https://openrouter.ai. ({e})"
             ))
         ]}
+    except Exception as e:
+        # Everything in this try block is a call into the model client or the
+        # tool-invocation wrapper above (which already handles bad tool args
+        # itself). What's left is provider/SDK territory we don't control: an
+        # A1 dev run hit json.JSONDecodeError twice, from langchain_openai
+        # parsing a malformed tool-call-arguments string somewhere inside
+        # model.invoke() -- not an openai.APIError, so it escaped the catch
+        # above entirely and the question scored 0 with no message at all.
+        # Catching narrowly here just means the next new SDK failure mode
+        # repeats this bug under a different exception class. Match what the
+        # eval harness's own broad except already assumes: this boundary
+        # should never let an exception through uncaught.
+        return {"messages": list(state["messages"]) + [
+            AIMessage(content=(
+                "Unexpected error from the model provider — try again. "
+                f"({type(e).__name__}: {e})"
+            ))
+        ]}
 
     content = response.content
     if not isinstance(content, str):

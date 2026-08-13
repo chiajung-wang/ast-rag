@@ -322,3 +322,54 @@ def test_malformed_tool_args_fed_back_not_crashed(mock_get_db, mock_anthropic):
     assert len(result["messages"]) == 2
     assert "Answer" in result["messages"][-1].content
     assert result["messages"][-1].additional_kwargs["tool_trace"][0]["tool"] == "read_file"
+
+
+# ── unhandled SDK exceptions in the model-invoke loop (2026-08-12 A1 finding) ─
+
+@patch("agent.answer_node.ChatOpenAI")
+@patch("agent.answer_node._get_db")
+def test_non_api_exception_from_model_invoke_handled_gracefully(mock_get_db, mock_anthropic):
+    """A1's n=3 dev run hit json.JSONDecodeError twice -- langchain_openai
+    parsing a malformed tool-call-arguments string somewhere inside
+    model.invoke(). Not an openai.APIError, so the old except openai.APIError
+    let it escape entirely: score=0, agent_cost=$0.00, no message, no tool
+    trace -- indistinguishable from a hang. Any exception in this scope is
+    provider/SDK territory, not our own logic, so the catch must be broad."""
+    import json as json_module
+    mock_get_db.return_value = _mock_db(exists=True)
+    mock_model = MagicMock()
+    mock_model.bind_tools.return_value = mock_model
+    mock_model.invoke.side_effect = json_module.JSONDecodeError("Expecting value", "doc", 0)
+    mock_anthropic.return_value = mock_model
+
+    state = AgentState(messages=[HumanMessage("q")], retrieved_chunks=[])
+
+    from agent.answer_node import answer_node
+    result = answer_node(state)  # must not raise
+
+    assert len(result["messages"]) == 2
+    last = result["messages"][-1]
+    assert "Unexpected error" in last.content
+    assert "JSONDecodeError" in last.content
+
+
+@patch("agent.answer_node.ChatOpenAI")
+@patch("agent.answer_node._get_db")
+def test_openai_api_error_still_gets_its_specific_message(mock_get_db, mock_anthropic):
+    """The broader catch must not swallow the more specific, more actionable
+    openai.APIError message (credit balance, rate limits) behind the generic
+    fallback -- except ordering, not just presence, is what's being tested."""
+    mock_get_db.return_value = _mock_db(exists=True)
+    mock_model = MagicMock()
+    mock_model.bind_tools.return_value = mock_model
+    mock_model.invoke.side_effect = _fake_api_error("credit balance too low")
+    mock_anthropic.return_value = mock_model
+
+    state = AgentState(messages=[HumanMessage("q")], retrieved_chunks=[])
+
+    from agent.answer_node import answer_node
+    result = answer_node(state)
+
+    last = result["messages"][-1]
+    assert "OpenRouter API error" in last.content
+    assert "Unexpected error" not in last.content
