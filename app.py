@@ -8,13 +8,16 @@ from agent.graph import graph
 from retrieval.pipeline import read_file
 from ui.helpers import parse_citations, build_permalink
 from indexer.corpus_config import DB_PATH
+import provider
 
 load_dotenv()
 
-for _var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
-    if not os.getenv(_var):
-        st.error(f"Missing env var: {_var}. Add it to .env and restart.")
-        st.stop()
+if not os.getenv(provider.API_KEY_VAR):
+    st.error(
+        f"Missing env var: {provider.API_KEY_VAR}. Copy .env.example to .env, "
+        "add your OpenRouter key, and restart."
+    )
+    st.stop()
 
 if not os.path.exists(DB_PATH):
     st.error("Index not found. Run `make index` first.")

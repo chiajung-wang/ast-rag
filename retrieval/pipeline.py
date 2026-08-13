@@ -8,6 +8,7 @@ from storage.db import DB
 from retrieval.bm25_index import BM25Index
 from retrieval.rrf import rrf
 from indexer.corpus_config import CLONE_DIR, CORPUS_SUBPATH, DB_PATH
+import provider
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ def _get_db() -> DB:
     global _db
     if _db is None:
         _db = DB(DB_PATH)
+        _db.assert_embed_model(provider.embed_model())
     return _db
 
 
@@ -39,13 +41,13 @@ def _get_bm25() -> BM25Index:
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI()
+        _client = OpenAI(base_url=provider.BASE_URL, api_key=provider.api_key())
     return _client
 
 
 def _embed_query(query: str) -> list[float]:
     response = _get_client().embeddings.create(
-        model="text-embedding-3-small",
+        model=provider.embed_model(),
         input=[query[:24_000]],
     )
     return response.data[0].embedding
@@ -69,6 +71,7 @@ def read_file(path: str, line_start: int, line_end: int) -> str:
         lines = full_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     except OSError:
         return f"[error: file not found: {path}]"
+    line_start = max(1, line_start)
     requested = line_end - line_start + 1
     actual_end = min(line_end, line_start + MAX_LINES - 1)
     result = "\n".join(lines[line_start - 1 : actual_end])
@@ -79,8 +82,17 @@ def read_file(path: str, line_start: int, line_end: int) -> str:
 
 def retrieve(query: str, k: int = 5) -> list[Chunk]:
     symbol_names = _get_db().all_symbol_names()
-    candidates = {m.group(1) for m in _SYMBOL_RE.finditer(query)}
     lower_map = {s.lower(): s for s in symbol_names}
+
+    # Keep query order. A set iterates in hash order, which Python randomizes
+    # per process, so the chosen symbol would change between runs.
+    seen_candidates: set[str] = set()
+    candidates: list[str] = []
+    for m in _SYMBOL_RE.finditer(query):
+        token = m.group(1)
+        if token not in seen_candidates:
+            seen_candidates.add(token)
+            candidates.append(token)
 
     results: list[Chunk] = []
     seen: set[str] = set()
