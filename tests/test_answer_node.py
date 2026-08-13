@@ -39,6 +39,13 @@ def _mock_model(responses: list):
 def _mock_db(exists: bool = True):
     mock_db = MagicMock()
     mock_db.chunk_exists_at.return_value = exists
+    # agent/citations.py validates via chunks_at (list) + file_path_known,
+    # not the boolean chunk_exists_at, since task 6.7's precision metric
+    # needs the actual chunk to check its symbol_name. An unconfigured
+    # MagicMock().chunks_at(...) returns a truthy mock either way, which
+    # silently broke the "citation gets stripped" test until this was added.
+    mock_db.chunks_at.return_value = [MagicMock(symbol_name="X")] if exists else []
+    mock_db.file_path_known.return_value = exists
     return mock_db
 
 

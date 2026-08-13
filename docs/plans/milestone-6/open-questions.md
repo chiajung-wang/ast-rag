@@ -39,11 +39,15 @@ Refreshed 2026-08-12 via `make eval-retrieval`. `verify_embeddings.py` had alrea
 
 New dev numbers (45 questions, was 33): BM25 42.2% (was 39.4%), dense 73.3% (was 69.7%), RRF hybrid 68.9% (was 63.6%), pre-check 95.6% (was 97.0%). Every configuration moved a few points and **none crossed another** — the ranking (pre-check > dense > RRF > BM25) and every conclusion in B1/B1b are unaffected. Updated in `README.md`, `CLAUDE.md`, and appended to `docs/plans/milestone-6/task-6-3.md`.
 
-### A3. Judge validation sample — BLOCKED on credit and on owner time
+### A3. Judge validation sample — CLOSED
 
-Task 6.7 needs 40 hand-labeled `(question, answer)` pairs to compute agreement with the LLM judge. The labeler must not see the judge verdict first.
+Human labeled all 40 rows blind (2026-08-13), sampled from the 150-run dev n=3 results file. Raw agreement 82.5%, κ=0.440 — looks bad, but 7 of the 40 rows are rubric-drift, not real disagreement: all 7 are q28/q29/q30 (the eval-authoring bug fixed while investigating A1), all `human=pass judge=fail`, where the stored "judge" verdict predates that fix and the human correctly labeled against the corrected rubric already sitting in the blind file. Excluding those:
 
-Same constraint as A2: the point of the exercise is an independent human opinion.
+**Clean comparison: n=33, agreement 32/33 (97.0%), κ=0.872.** Clears the ≥0.8 bar task 6.7 asks for.
+
+Exactly one real disagreement survives: `q03-run1`, "Where is `ChatPromptTemplate` defined?" — human said fail, original judge said pass. The automated cross-judge check (haiku-4.5, run earlier the same day) independently flagged the same row for the same reason: the answer lists the class's methods and location in full but never states the rubric's required sentence — *"builds chat-style prompts from message templates"* — explicitly. Two independent evaluators, one human and one different model, agree the original judge was too willing to infer a stated fact from field names. A real, narrow, corroborated finding about judge strictness, not a systemic problem — narrow because it's 1 of 33 clean comparisons and it isn't touched here (see the note below task-6-7 about leaving this open).
+
+Cross-judge check (haiku-4.5, fully automated, no bias concern): 34/40 raw, same rubric-drift artifact — 39/40 (97.5%) once the same 7 rows are excluded, corroborating the human result independently.
 
 ### A4. Confirm prompt caching engages inside the real tool loop — CLOSED
 

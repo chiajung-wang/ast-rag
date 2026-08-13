@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from storage.db import DB
 from retrieval.pipeline import read_file as _read_file
 from agent.state import AgentState
-from agent.citations import validate_citations
+from agent.citations import validate_citations_with_stats
 from indexer.corpus_config import DB_PATH
 import provider
 
@@ -284,7 +284,7 @@ def answer_node(state: AgentState) -> dict:
             (b.get("text", "") if isinstance(b, dict) else getattr(b, "text", ""))
             for b in content
         )
-    validated = validate_citations(content, _get_db())
+    validated, citation_stats = validate_citations_with_stats(content, _get_db())
     final = AIMessage(
         content=validated,
         usage_metadata={
@@ -301,6 +301,13 @@ def answer_node(state: AgentState) -> dict:
             "budget_exhausted": budget_exhausted,
             "cache_read_tokens": total_cache_read,
             "cache_write_tokens": total_cache_write,
+            "citation_stats": {
+                "emitted": citation_stats.emitted,
+                "stripped": citation_stats.stripped,
+                "hallucinated_paths": citation_stats.hallucinated_paths,
+                "precise": citation_stats.precise,
+                "survived": citation_stats.survived,
+            },
         },
     )
     return {"messages": list(state["messages"]) + [final]}

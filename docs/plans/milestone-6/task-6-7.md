@@ -6,12 +6,12 @@ Measure the three things the eval reports nothing about: citation quality, judge
 
 ## Acceptance Criteria
 
-- [ ] The results file reports citation precision, strip rate, and hallucinated-path rate.
-- [ ] A human-labeled sample gives a judge agreement figure, reported as Cohen's kappa.
-- [ ] The results file reports p50 and p95 latency, tool rounds used, and the budget-exhausted rate per tier.
-- [ ] `make eval` exits non-zero when the total score falls below a committed baseline.
-- [ ] `README.md` reports the judge agreement figure next to the eval score.
-- [ ] `make check` passes.
+- [x] The results file reports citation precision, strip rate, and hallucinated-path rate.
+- [x] A human-labeled sample gives a judge agreement figure, reported as Cohen's kappa.
+- [x] The results file reports p50 and p95 latency, tool rounds used, and the budget-exhausted rate per tier.
+- [x] `make eval` exits non-zero when the total score falls below a committed baseline.
+- [x] `README.md` reports the judge agreement figure next to the eval score.
+- [x] `make check` passes.
 
 ## Items
 
@@ -86,15 +86,35 @@ This makes the eval a gate instead of a report, and it gives the CI job from tas
 
 ## Steps
 
-- [ ] Add validation statistics to `agent/citations.py` and keep the current signature working.
-- [ ] Carry the statistics through `answer_node` in `additional_kwargs`.
-- [ ] Compute citation precision, strip rate, and hallucinated-path rate in `_run_once`.
-- [ ] Add wall-clock timing and the tool-round count to `_run_once`.
-- [ ] Aggregate latency p50 and p95, mean rounds, and exhaustion rate per tier in `format_results_md`.
-- [ ] Sample 40 triples from `evals/results/` into `evals/judge_validation.jsonl`.
-- [ ] Label the 40 by hand, without looking at the judge verdicts.
-- [ ] Write the kappa calculation in `evals/judge_validation.py` and report the figure.
-- [ ] Run the same answers through a second judge model and record the score delta.
-- [ ] Add `evals/baseline.json` and the comparison in `run()`, plus `--update-baseline`.
-- [ ] Report the new metrics in `README.md`.
-- [ ] Run `make check` and confirm all tests pass.
+- [x] Add validation statistics to `agent/citations.py` and keep the current signature working.
+- [x] Carry the statistics through `answer_node` in `additional_kwargs`.
+- [x] Compute citation precision, strip rate, and hallucinated-path rate in `_run_once`.
+- [x] Add wall-clock timing and the tool-round count to `_run_once`.
+- [x] Aggregate latency p50 and p95, mean rounds, and exhaustion rate per tier in `format_results_md`.
+- [x] Sample 40 triples from `evals/results/` into `evals/judge_validation.jsonl`.
+- [x] Label the 40 by hand, without looking at the judge verdicts.
+- [x] Write the kappa calculation in `evals/judge_validation.py` and report the figure.
+- [x] Run the same answers through a second judge model and record the score delta.
+- [x] Add `evals/baseline.json` and the comparison in `run()`, plus `--update-baseline`.
+- [x] Report the new metrics in `README.md`.
+- [x] Run `make check` and confirm all tests pass.
+
+## Result
+
+All four items landed. Tests 206 (after judge_validation.py) -> 243.
+
+**1. Citation precision.** `agent/citations.py` gained `validate_citations_with_stats`, which `validate_citations` now wraps -- the one existing caller needed no change. Precision checks something plain containment (`chunk_exists_at`) cannot: for a surviving marker, does *any* chunk overlapping that range have a `symbol_name` the answer text actually mentions? A citation whose range is real but attached to the wrong claim now fails precision even though it passes validation. Two new DB methods support it: `chunks_at` (containment query returning the chunk, not a bool) and `file_path_known` (distinguishes a hallucinated path from a real path with a bad range -- different failure modes, now measured separately).
+
+**2. Judge validation.** `evals/judge_validation.py`, new. Stratified sampling (all non-pass rows + one pass row per distinct question, not repeat runs) rather than plain random, because a ~93%-pass judge makes plain random sampling say nothing about false-positive rate. Human labeling: κ=0.872 clean (0.440 raw, with 7/40 rows explained by rubric drift from the A1 eval-criteria fix, not judge noise -- full accounting in `open-questions.md` A3). Cross-judge (haiku-4.5): 97.5% agreement clean, corroborating the human result independently. One real, narrow disagreement found by both: q03, a judge willing to infer a stated fact from field names rather than requiring it explicit.
+
+**3. Latency, rounds, exhaustion.** `_run_once` now times `graph.invoke` and counts distinct tool rounds. `aggregate_by_tier` pools counts across every run in a tier (`sum(stripped)/sum(emitted)`, not a mean of per-run rates, which would be undefined or misleading for a run with zero citations) and reports p50/p95 latency, mean rounds, and budget-exhaustion rate per tier, appended to every results file as "Per-tier instrumentation."
+
+**4. Regression gate.** `evals/baseline.json` holds real numbers, not the template's nulls: dev 91.0/95 (n=3, sonnet-5, 2026-08-12 -- explicitly noted as measured before the A1 fixes, so a conservative floor), test 32/32 (n=1), retrieval 0.956/0.908 (informational, not gated). `run()` returns its rows instead of `None` and never calls `sys.exit` itself, so it stays usable as a plain function from tests; the exit-code decision lives in a new `main(argv) -> int`, matching `judge_validation.py`'s pattern. `--update-baseline` writes a new entry instead of gating.
+
+The gate comparison is skipped (not failed) when the run's `max_total` doesn't match the baseline's -- a grown or shrunk question set (like task 6.4's 33 -> 45) isn't a regression, it's a different scale, and comparing across scales would either mask a real regression or manufacture a fake one.
+
+### What the implementation caught in itself
+
+- `_mock_db` in `tests/test_answer_node.py` only configured `chunk_exists_at`; citations.py's new code calls `chunks_at`/`file_path_known` instead, and an unconfigured `MagicMock()` attribute is truthy by default -- silently broke the "citation gets stripped" test until the mock was updated to match.
+- First cut of `--update-baseline` wrote to a bare `evals/baseline.json` with no parent-directory creation, unlike the `results_dir.mkdir(parents=True)` already sitting three lines above it for the results file. `save_baseline` now creates its parent dir too.
+- The first regression-gate test asserted `code == 1` with numbers that didn't actually breach the `drop > 2.0` tolerance -- twice. A 1-question set caps the possible drop at 2.0 (not `>` 2.0), and the second attempt's mock answer happened to contain the expected file path substring, keeping `file_ok=True` even with the judge failing, so the drop landed at exactly 2.0 again. Fixed by widening to 2 questions with an answer that fails both checks, which produces an unambiguous 4-point drop -- and this test is exactly the "make eval exits non-zero" contract itself, run through `main()`, not just `check_regression()` in isolation.

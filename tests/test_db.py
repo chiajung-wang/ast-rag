@@ -402,3 +402,37 @@ def test_sample_embedded_chunks_respects_limit(db):
         c = make_chunk("m.py", f"C{i}", "class", None, i + 1, i + 2, None, f"class C{i}: pass")
         db.insert_embedding(db.insert_chunk(c), _fake_embedding())
     assert len(db.sample_embedded_chunks(3)) == 3
+
+
+# ── citation-precision support (task 6.7) ────────────────────────────────────
+
+def test_chunks_at_returns_overlapping_chunk(db, chunk_a):
+    db.insert_chunk(chunk_a)
+    chunks = db.chunks_at("runnables/base.py", 10, 100)
+    assert len(chunks) == 1
+    assert chunks[0].symbol_name == "RunnableSequence"
+
+
+def test_chunks_at_empty_when_range_does_not_match(db, chunk_a):
+    db.insert_chunk(chunk_a)
+    assert db.chunks_at("runnables/base.py", 500, 600) == []
+
+
+def test_chunks_at_can_return_multiple_overlapping_chunks(db):
+    # A method chunk nested inside a class's line range -- both "contain" a
+    # citation to a line inside the method.
+    db.insert_chunk(make_chunk("m.py", "Outer", "class", None, 1, 100, None, "class Outer: ..."))
+    db.insert_chunk(make_chunk("m.py", "inner", "method", "Outer", 10, 20, None, "def inner(): ..."))
+    chunks = db.chunks_at("m.py", 12, 18)
+    names = {c.symbol_name for c in chunks}
+    assert names == {"Outer", "inner"}
+
+
+def test_file_path_known_true_for_indexed_file(db, chunk_a):
+    db.insert_chunk(chunk_a)
+    assert db.file_path_known("runnables/base.py") is True
+
+
+def test_file_path_known_false_for_never_indexed_file(db, chunk_a):
+    db.insert_chunk(chunk_a)
+    assert db.file_path_known("nonexistent/made_up.py") is False

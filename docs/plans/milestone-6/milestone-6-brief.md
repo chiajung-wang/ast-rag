@@ -38,7 +38,7 @@
 | 6.4 | Question set: held-out, tiers, adversarial | `evals/questions-test.jsonl` (new), `evals/questions.jsonl` | ~3h | done |
 | 6.5 | Inheritance-aware class outline | `indexer/chunker.py`, `storage/db.py`, `agent/answer_node.py` | ~4h | done, accuracy check tracked as B3 |
 | 6.6 | Repo hygiene | `.github/workflows/`, `.gitignore`, `storage/db.py`, `agent/answer_node.py` | ~2h | **done** |
-| 6.7 | Eval instrumentation | `evals/run.py`, `evals/judge_validation.py` (new) | ~4h | not started |
+| 6.7 | Eval instrumentation | `evals/run.py`, `evals/judge_validation.py` (new) | ~4h | done |
 
 ## Out of scope — see `open-questions.md`
 

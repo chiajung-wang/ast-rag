@@ -1,0 +1,18 @@
+{
+  "dev": {
+    "median_total": 91.0,
+    "max_total": 95,
+    "n_runs": 3
+  },
+  "test": {
+    "median_total": 32,
+    "max_total": 32,
+    "n_runs": 1
+  },
+  "retrieval": {
+    "recall_at_5": 0.956,
+    "mrr": 0.908
+  },
+  "updated": "2026-08-12",
+  "_note": "dev: 50-question set, anthropic/claude-sonnet-5 agent+judge via OpenRouter, run 2026-08-12 -- measured before the q20/q28/q29/q30 fixes (see docs/plans/milestone-6/open-questions.md A1), so this is a conservative floor, not the current true accuracy. test: 17-question held-out set, n=1 only, no variance yet. retrieval: RRF + symbol pre-check row from the 45-question dev ablation (A5 refresh), informational only -- not gated by run(), which only checks the dev/test agent scores."
+}

@@ -231,6 +231,30 @@ class DB:
             (file_path, line_start, line_end),
         ) is not None
 
+    def chunks_at(self, file_path: str, line_start: int, line_end: int) -> list[Chunk]:
+        """Same containment predicate as chunk_exists_at, but returns the
+        chunk(s) instead of a bool -- citation precision needs the symbol
+        name a passing marker's range actually belongs to."""
+        rows = self._fetchall(
+            """
+            SELECT id, file_path, symbol_name, symbol_type, parent_class,
+                   line_start, line_end, docstring, text, embed_text, base_classes
+            FROM chunks
+            WHERE file_path = ? AND line_start <= ? AND line_end >= ?
+            """,
+            (file_path, line_start, line_end),
+        )
+        return [_row_to_chunk(r) for r in rows]
+
+    def file_path_known(self, file_path: str) -> bool:
+        """Whether any chunk was indexed at this path. Distinguishes a
+        hallucinated path (model invented a file that was never chunked)
+        from a path that's real but the wrong line range -- the citation
+        validator strips both, but they're different failure modes."""
+        return self._fetchone(
+            "SELECT 1 FROM chunks WHERE file_path = ? LIMIT 1", (file_path,)
+        ) is not None
+
     def all_chunks(self) -> list[Chunk]:
         rows = self._fetchall(
             """
