@@ -43,3 +43,9 @@ skills-lock.json
 
 # Retrieval eval embedding cache (regenerated, costs ~nothing)
 evals/.embedding_cache.json
+
+# Judge validation key — must stay hidden from the human labeler until
+# scoring, and the blind file itself (labels are the whole point of A3).
+evals/.judge_validation_key.jsonl
+evals/judge_validation_blind.jsonl
+evals/judge_validation.jsonl

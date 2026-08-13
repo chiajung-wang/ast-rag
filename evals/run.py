@@ -103,9 +103,13 @@ def _judge(
     must_not_assert: list[str],
     answer: str,
     max_retries: int = 3,
+    model_name: str | None = None,
 ) -> tuple[bool, int, int]:
+    # model_name lets judge_validation.py run the same rubric through a
+    # second model for a cross-judge agreement check, without touching the
+    # live JUDGE_MODEL config any real eval run uses.
     model = ChatOpenAI(
-        model=JUDGE_MODEL,
+        model=model_name or JUDGE_MODEL,
         temperature=0,
         base_url=provider.BASE_URL,
         api_key=provider.api_key(),
