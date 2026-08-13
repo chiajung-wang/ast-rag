@@ -1,5 +1,7 @@
 # ast-rag
 
+[![check](https://github.com/chiajung-wang/ast-rag/actions/workflows/check.yml/badge.svg)](https://github.com/chiajung-wang/ast-rag/actions/workflows/check.yml)
+
 Ask natural-language questions about `langchain-core` source code. Get answers with citations that link directly to the relevant lines on GitHub.
 
 ```
@@ -149,11 +151,14 @@ uv sync
 
 ```bash
 make check            # run unit tests
-make eval             # 34-question end-to-end eval (LLM agent + LLM judge)
+make eval             # 50-question dev-set end-to-end eval (LLM agent + LLM judge)
+make eval-test        # 17-question held-out end-to-end eval (never used for tuning)
 make eval-retrieval   # retriever-only ablation: recall@k, MRR, nDCG@5 (no LLM)
 ```
 
 `make eval-retrieval` makes no chat-model calls and caches its query embeddings, so it runs in seconds and costs nothing after the first pass. Use it to check a retrieval change before spending a full eval.
+
+CI (`.github/workflows/check.yml`) runs `make check` on every push and pull request. It does not run the two `make eval` targets — those spend API budget and are a manual, explicit step.
 
 ## CLI usage
 
@@ -177,6 +182,7 @@ make eval
 | 3 | LangGraph Agent — retrieve + answer nodes | ✅ Complete |
 | 4 | Streamlit UI + citations + eval harness | ✅ Complete |
 | 5 | Polish + ship — error handling, make check, eval results | ✅ Complete |
+| 6 | Maintenance — retrieval/citation bug fixes, held-out eval set, class-outline inheritance walk, move to OpenRouter, CI, prompt caching, eval instrumentation | ✅ Complete |
 
 Index: 2414 chunks from `langchain-core` at commit `1519ed5a`.
 
