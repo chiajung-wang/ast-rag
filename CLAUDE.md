@@ -177,6 +177,10 @@ Current pinned SHA: `1519ed5afbc3bfcc7170b12baa07f1ae7e98edd0` — 181 .py files
 
 **BM25 score filter**: BM25Okapi IDF = 0 when a token appears in exactly half the corpus — do not filter by `score > 0`. Return top-k unconditionally. See `retrieval/bm25_index.py:search`.
 
+## Writing Style
+
+Prose (docs, PR bodies, commit bodies, error messages, comments) follows ASD-STE100 Simplified Technical English — rule set in global CLAUDE.md. For an audit or rewrite pass, use the `ste-writing` skill.
+
 ## Scope Boundary
 
 **Not in scope**: symbol graph/DuckDB, `find_callers`/`find_callees`, reranker, 6-node graph, React/FastAPI, Docker, multi-provider LLM, Langfuse.
