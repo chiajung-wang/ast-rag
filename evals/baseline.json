@@ -1,6 +1,6 @@
 {
   "dev": {
-    "median_total": 91.0,
+    "median_total": 94.0,
     "max_total": 95,
     "n_runs": 3
   },
@@ -13,6 +13,6 @@
     "recall_at_5": 0.956,
     "mrr": 0.908
   },
-  "updated": "2026-08-12",
-  "_note": "dev: 50-question set, anthropic/claude-sonnet-5 agent+judge via OpenRouter, run 2026-08-12 -- measured before the q20/q28/q29/q30 fixes (see docs/plans/milestone-6/open-questions.md A1), so this is a conservative floor, not the current true accuracy. test: 17-question held-out set, n=1 only, no variance yet. retrieval: RRF + symbol pre-check row from the 45-question dev ablation (A5 refresh), informational only -- not gated by run(), which only checks the dev/test agent scores."
+  "updated": "2026-08-13",
+  "_note": "dev: 50-question set, anthropic/claude-sonnet-5 agent+judge via OpenRouter, run 2026-08-13 -- clean re-run with the q28/q29/q30 grading-criteria fix and the broadened exception catch both in place (see docs/plans/open-questions/milestone-6.md A1). The one point off max is q20, real measured flakiness in the model's tool-call JSON, not a grading artifact -- the exception fix only stops it from zombie-scoring 0. test: 17-question held-out set, n=1 only, no variance yet. retrieval: RRF + symbol pre-check row from the 45-question dev ablation (A5 refresh), informational only -- not gated by run(), which only checks the dev/test agent scores."
 }

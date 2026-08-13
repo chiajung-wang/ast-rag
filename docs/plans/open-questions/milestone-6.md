@@ -12,18 +12,18 @@ Status key: **OPEN** — needs a decision. **BLOCKED** — needs data first. **P
 
 > **The Anthropic account has no credit.** Verified 2026-08-12: any agent or judge call returns `400 invalid_request_error — Your credit balance is too low to access the Anthropic API`. Every item in this group that spends Anthropic tokens (A1, A3, A4) is blocked on topping up, not on deciding to spend. Measured cost is small: ~$0.62 for a held-out n=1 run, ~$1.82 for dev n=1, ~$5.46 for dev n=3. OpenAI is unaffected, so `make eval-retrieval` still runs.
 
-### A1. Re-run the eval at n=3 — PARTIALLY CLOSED, one open decision
+### A1. Re-run the eval at n=3 — CLOSED
 
-Run 2026-08-12, dev set (50 questions, 45×2 + 5 negative×1 = 95 max), `anthropic/claude-sonnet-5` agent+judge via OpenRouter, n=3: **91.0 / 95 (95.8%)**, $9.96 ($8.74 agent + $1.21 judge). Replaces the old 63/67 (94%, n=1, haiku-4-5, direct Anthropic, 34 questions) — not a fair comparison to begin with, since provider, model, and question count all changed.
+Run 2026-08-12, dev set (50 questions, 45×2 + 5 negative×1 = 95 max), `anthropic/claude-sonnet-5` agent+judge via OpenRouter, n=3: 91.0 / 95 (95.8%), $9.96. Replaces the old 63/67 (94%, n=1, haiku-4-5, direct Anthropic, 34 questions) — not a fair comparison to begin with, since provider, model, and question count all changed.
 
-Investigating the 4 non-perfect rows found two unrelated bugs, both now fixed and independently re-verified (see the `fix(agent)` and `fix(eval)` commits, 2026-08-13):
+Investigating that run's 4 non-perfect rows found two unrelated bugs, both fixed (see the `fix(agent)` and `fix(eval)` commits, 2026-08-13):
 
-- **q20** — not a grading issue. Run 2 was a silent crash: `score=0 agent_cost=$0.00`, no message. `agent/answer_node.py` only caught `openai.APIError`; a `json.JSONDecodeError` from the SDK's own response parsing escaped uncaught. Fixed by broadening the catch. This does **not** retroactively make q20 a clean pass — the underlying cause (the model occasionally emitting malformed tool-call JSON) still happens, and the fix only ensures it degrades to a graceful message instead of a $0 zombie result. q20's median=1 stands as a real, measured flakiness score.
-- **q28, q29, q30** — genuine eval-authoring bugs, predating task 6.4. Each `description_must_include` demanded a fact absent from the indexed corpus entirely (grep-verified), which the system prompt's own citation rule forbids the agent from stating. Fixed in `evals/questions.jsonl`. Each independently re-confirmed 2/2 post-fix (n=1, ~$0.24 total).
+- **q20** — not a grading issue. Run 2 was a silent crash: `score=0 agent_cost=$0.00`, no message. `agent/answer_node.py` only caught `openai.APIError`; a `json.JSONDecodeError` from the SDK's own response parsing escaped uncaught. Fixed by broadening the catch. This does **not** make q20 a clean pass — the underlying cause (the model occasionally emitting malformed tool-call JSON) still happens, and the fix only ensures it degrades to a graceful message instead of a $0 zombie result.
+- **q28, q29, q30** — genuine eval-authoring bugs, predating task 6.4. Each `description_must_include` demanded a fact absent from the indexed corpus entirely (grep-verified), which the system prompt's own citation rule forbids the agent from stating. Fixed in `evals/questions.jsonl`.
 
-**What's not done:** a clean n=3 re-run of the full 50-question set with both fixes in place. The 91.0/95 figure above still reflects the pre-fix criteria on q28/q29/q30 (each capped at 1/2 by a bug, now fixed) and the pre-fix crash handling on q20 (unrelated to its true score). A defensible read: 91.0/95 plus the +3 from q28/q29/q30's fix ≈ **94/95 (~99%)**, but that mixes an n=3 aggregate with n=1 spot-checks and isn't a number to publish as-is.
+**Clean re-run, 2026-08-13, both fixes in place: 94.0 / 95 (98.9%), $9.57 ($8.35 agent + $1.22 judge).** This is the current headline number, recorded in `evals/baseline.json`. The one point off max is q20 — real, measured flakiness (median=1, judge fail on one of three runs), exactly as predicted, not something the exception-handling fix was meant to cure. q28/q29/q30 all scored a clean 2/2 under the full n=3 methodology, not just the earlier n=1 spot-check. Two questions (q25, q27) showed run-to-run judge variance (2 of 3 passing) but still held median 2 — worth watching if a future run drops them.
 
-Decision: spend another ~$10 for one clean n=3 run to get a single, methodologically consistent headline number, or publish 91.0/95 with this note attached and let a future run supersede it. Either way, this now also unblocks the 6.7 regression baseline and the 6.5 accuracy check, which were gated on A1 landing at all.
+This also closes B3 (the accuracy check task 6.5 deferred here) and gives the task 6.7 regression gate its real baseline.
 
 ### A2. Who writes the labels and the held-out questions — OPEN
 
@@ -95,13 +95,11 @@ The recall@5 to recall@10 gap bounds what reranking could recover. It is zero on
 
 Every chunk a reranker could promote is already in the top 5. This is the one conclusion from 6.3 that held-out did **not** disturb, and it holds for plain RRF on held-out too (93.3% at both cutoffs).
 
-### B3. Cost of removing the prompt hack — BLOCKED on A1
+### B3. Cost of removing the prompt hack — CLOSED, no cost found
 
 Task 6.5 deleted the langchain-core naming rules from the system prompt and left the accuracy check to A1 by design (see the task 6.5 commit body).
 
-Held-out end-to-end scored 32/32 (100%, n=1) after the hack was removed, so the score did not drop. But no same-model, same-provider run with the hack still in place exists to compare against — the last pre-removal number is the old haiku/direct-Anthropic baseline, which A1 already rules out as not a fair comparison. Without that controlled pair, "held steady" is a good sign, not a closed answer.
-
-If A1's clean re-run also holds steady, treat this as answered. If it drops, find what the outline tool still lacks. Do not put the class names back.
+Held-out end-to-end scored 32/32 (100%, n=1) after the hack was removed. A1's clean n=3 dev re-run (2026-08-13) landed at 94.0/95, with the sole miss (q20) a pre-existing, unrelated flakiness issue — not a symbol the outline tool failed to resolve. No same-model pre-removal run exists for a strict controlled pair, but two independent post-removal scores at effective ceiling is enough signal: the outline tool's inheritance walk replaced what the hardcoded rule supplied. Do not put the class names back.
 
 ---
 
