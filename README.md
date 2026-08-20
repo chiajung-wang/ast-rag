@@ -197,7 +197,7 @@ Two question sets:
 
 Tier counts are now 5 or more per tier on both sets. The original dev set had 1 question each in definition, usage, cross-file, and negative.
 
-**End-to-end dev baseline: 94.0 / 95 (98.9%)** — dev set (50 q), n=3, `anthropic/claude-sonnet-5` agent+judge via OpenRouter, run 2026-08-13, $9.57. An earlier 2026-08-12 run scored 91.0/95 before two bugs were fixed: a silent crash where a non-`openai.APIError` SDK exception escaped the agent's error handling uncaught (now caught generically), and 3 grading-criteria bugs that demanded facts absent from the indexed corpus, contradicting the system prompt's own citation rule (now corrected in `evals/questions.jsonl`). The current run is a clean re-run with both fixes in place — full accounting in `docs/plans/open-questions/milestone-6.md` A1. The one point off max is q20, real measured flakiness in the model's tool-call JSON, not a grading artifact.
+**End-to-end dev baseline: 94.0 / 95 (98.9%)** — dev set (50 q), n=3, `anthropic/claude-sonnet-5` agent+judge via OpenRouter, run 2026-08-13, $9.57. An earlier 2026-08-12 run scored 91.0/95 before two bugs were fixed: a silent crash where a non-`openai.APIError` SDK exception escaped the agent's error handling uncaught (now caught generically), and 3 grading-criteria bugs that demanded facts absent from the indexed corpus, contradicting the system prompt's own citation rule (now corrected in `evals/questions.jsonl`). The current run is a clean re-run with both fixes in place — full accounting in `docs/plans/open-questions/milestone-6.md` A1. The one point off max is q20, where a fourth grading criterion is wrong in the same way — see "What the eval does not prove" below.
 
 **End-to-end held-out: 32 / 32 (100%)** — held-out set (17 q), n=1, same models, run 2026-08-12, $1.00. This is the score that matters more: written after the prompt froze, never used for tuning.
 
@@ -206,6 +206,24 @@ Tier counts are now 5 or more per tier on both sets. The original dev set had 1 
 `make eval` now gates on `evals/baseline.json` and exits non-zero on a regression of more than 2 points versus the last committed baseline (currently 94.0/95 dev, 32/32 held-out). Every results file also reports p50/p95 latency, mean tool rounds, budget-exhaustion rate, and three citation-quality figures (precision, strip rate, hallucinated-path rate) per tier.
 
 Results go to `evals/results/results-<timestamp>-<set>-<agent>-<judge>.md`, with the question set named in the filename so a dev score and a held-out score cannot be confused.
+
+## What the eval does not prove
+
+The scores above are real. They are also narrow. Six limits, in the order a reader should weigh them.
+
+**1. The held-out score has no variance.** 32/32 comes from one run over 17 questions. The dev set runs 3 times and reports a median with per-question variance. The held-out set does not. A single question moves that score by about 3 points, so read 100% as one sample rather than a rate.
+
+**2. Two dev questions are unstable.** q25 and q27 each hold a median of 2 but pass the judge on only 2 runs of 3 (variance 0.33). At n=3 they cost nothing. A single-run eval could score either one lower. The stable total hides them.
+
+**3. The cross-file tier carries most of the risk.** It averages 2.9 tool rounds against 0.2 to 1.8 for every other tier, hits the 8-round budget on 7% of runs, and strips 8% of the citations it emits. Its p95 latency is 58.0s. It is also the tier closest to a question a real user asks.
+
+**4. A grading criterion can be wrong, and one still is.** q20 loses the only missing dev point to a rubric line that expects the answer to say the synchronous `CallbackManager` respects each handler's `run_inline` flag. The synchronous dispatch path, `handle_event` at `callbacks/manager.py:255-336`, never reads that flag. Only the async path does. The answer is correct and the criterion is not. Three earlier criteria failed the same way and were corrected in `a86cf26`. A hand-written rubric is a source of error that the score itself cannot show.
+
+**5. The judge and the agent were the same model.** The recorded baseline ran `anthropic/claude-sonnet-5` on both sides. Human labels put agreement at κ=0.872, and a different model, `anthropic/claude-haiku-4.5`, re-judged the same sample to 39/40. Both checks lower the concern. Neither one removes it.
+
+**6. Both sets are small.** 50 dev questions and 17 held-out. One question is worth 2 points on dev and about 3 on held-out. Read the direction of a change, not its size.
+
+The citation check has a separate limit that sample size does not cover. See the Citations section above.
 
 ## Stack
 
